@@ -1,0 +1,43 @@
+{
+  "license": "LICENSE",
+  "adaptations": [
+    "workspace import paths",
+    "Chinese and English terminal controls",
+    "controlled, once-only approval integration",
+    "disable staggered line animations in real approval previews"
+  ],
+  "components": [
+    {
+      "registry": "https://r.assistant-ui.com/elements-loading-state.json",
+      "documentation": "https://www.assistant-ui.com/elements/loading-state",
+      "source": "packages/ui/src/components/react/assistant-ui/elements/loading-state.tsx",
+      "file": "elements/loading-state.tsx",
+      "upstreamContentSha256": "1a40f01f59fa6857508e4ac9a723868b49f96084c68958f3adb41c5a6ca2ba56",
+      "installedFileSha256": "7a89cd618046e6364672484fd98f059ec7815d8d8e9e5d496b636cfae8203552"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-approval-card.json",
+      "documentation": "https://www.assistant-ui.com/elements/approval-card",
+      "source": "packages/ui/src/components/react/assistant-ui/elements/approval-card.tsx",
+      "file": "elements/approval-card.tsx",
+      "upstreamContentSha256": "a6b9797c48a965d629af628b8e8a9a4102ce9c6d7b2ca2f9ead75676223dcdef",
+      "installedFileSha256": "43b97447c5c5133ad178b1cec2725f40ed9f28911d1d13e1136a881f8c3a9d0d"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-terminal-block.json",
+      "documentation": "https://www.assistant-ui.com/elements/terminal-block",
+      "source": "packages/ui/src/components/react/assistant-ui/elements/terminal-block.tsx",
+      "file": "elements/terminal-block.tsx",
+      "upstreamContentSha256": "35e1ccbb9bf8fe36967441485363b3a5a4f2c4b7183eb88bcf098f5c761048c1",
+      "installedFileSha256": "d1cfc358d0de1bf3b192b3994550d0945639c8050901de2d1a480f4f3cdf61b5"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-code-diff.json",
+      "documentation": "https://www.assistant-ui.com/elements/code-diff",
+      "source": "packages/ui/src/components/react/assistant-ui/elements/code-diff.tsx",
+      "file": "elements/code-diff.tsx",
+      "upstreamContentSha256": "76417061021b41036c23b862f054b8c2ba52e135358ff4c0432a8e54c654b4c2",
+      "installedFileSha256": "17b7347cd4f51a05ed6dad057a07b55659a7dcf49e369af673e0c325d3ee8d25"
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+// Checks that model names, recommendations and exclusions resolve only explicit generation choices.
+import assert from "node:assert/strict";
+import test from "node:test";
+import { standardDiagramKinds } from "../../../../../shared/contracts/index.js";
+import { resolveStandardGenerationSelection, resolveStandardScopeAnswers, standardGenerationIntroduction } from "./standard-generation-scope.js";
+
+test("a pasted requirement does not authorize all models, and model questions do not authorize generation", () => {
+  assert.equal(resolveStandardGenerationSelection("高校教室管理系统。管理员维护教室，师生自主预约，系统生成报修工单。", false), undefined);
+  assert.equal(resolveStandardGenerationSelection("用例图和类图有什么区别？", true), undefined);
+  assert.equal(resolveStandardGenerationSelection("只解释 E-R 图，不要生成", true), undefined);
+  assert.match(standardGenerationIntroduction(), /你希望生成哪些模型/);
+  assert.match(standardGenerationIntroduction(), /数据库表关系图/);
+  assert.match(standardGenerationIntroduction("en"), /Which models/);
+});
+
+test("accepts named, numbered, recommended and all-model choices without silently adding excluded types", () => {
+  assert.deepEqual(resolveStandardGenerationSelection("只生成用例图和类图", false), ["usecase", "class"]);
+  assert.deepEqual(resolveStandardGenerationSelection("不要生成类图，只要用例图", true), ["usecase"]);
+  assert.deepEqual(resolveStandardGenerationSelection("只要用例图不要类图", true), ["usecase"]);
+  assert.deepEqual(resolveStandardGenerationSelection("不要类图和用例图，只生成架构图", true), ["architecture"]);
+  assert.deepEqual(resolveStandardGenerationSelection("1、2、3", true), ["function", "usecase", "activity"]);
+  assert.deepEqual(resolveStandardGenerationSelection("按推荐方案", true), ["function", "usecase", "activity"]);
+  assert.deepEqual(resolveStandardGenerationSelection("生成全部八类图", true), [...standardDiagramKinds]);
+  assert.deepEqual(resolveStandardGenerationSelection("generate a class diagram", false), ["class"]);
+  assert.deepEqual(resolveStandardGenerationSelection('只修改用例图：把“教室空闲状态检索”重命名为“查询教室空闲状态”。保留该图其他节点、关系和所有ID，不修改功能结构图、总体架构图或其他产物。', false), ["usecase"]);
+  assert.deepEqual(resolveStandardGenerationSelection("用例图修改名称，类图不修改，总体架构图暂不调整", false), ["usecase"]);
+  assert.deepEqual(resolveStandardGenerationSelection("请生成体系结构图", false), ["architecture"]);
+  assert.deepEqual(resolveStandardGenerationSelection("能否生成系统的领域概念图", false), ["er"]);
+});
+
+const round = { purpose: "generation_scope" as const, questions: [{ id: "scope", title: "新增模型？", multiple: false,
+  options: ["是，加入并生成领域概念图", "不生成"], recommendation: "推荐加入", scopeChoices: [
+    { id: "add", label: "是，加入并生成领域概念图", kinds: ["er" as const], recommended: true },
+    { id: "skip", label: "不生成", kinds: [], recommended: false },
+  ] }], answers: [] };
+test("scope consent uses option identifiers independently of labels or submitted display text", () => {
+  assert.deepEqual(resolveStandardScopeAnswers(round, [{ questionId: "scope", answer: "总体架构图", selectedOptionIds: ["add"] }]), ["er"]);
+  assert.deepEqual(resolveStandardScopeAnswers(round, [{ questionId: "scope", answer: "生成全部", selectedOptionIds: ["skip"] }]), []);
+  const renamed = structuredClone(round); renamed.questions[0]!.scopeChoices[0]!.label = "Yes, add this model";
+  assert.deepEqual(resolveStandardScopeAnswers(renamed, [{ questionId: "scope", answer: "Yes", selectedOptionIds: ["add"] }]), ["er"]);
+});
+test("scope submissions reject invented identifiers, missing metadata, stale questions and invalid multiplicity", () => {
+  for (const selectedOptionIds of [["concept_er"], ["add", "skip"], ["add", "add"], undefined]) {
+    assert.throws(() => resolveStandardScopeAnswers(round, [{ questionId: "scope", answer: "同意", selectedOptionIds }]));
+  }
+  const answer = { questionId: "scope", answer: "同意", selectedOptionIds: ["add"] };
+  assert.throws(() => resolveStandardScopeAnswers(undefined, [answer]), /问题已变化/);
+  assert.throws(() => resolveStandardScopeAnswers({ ...round, answers: [answer] }, [answer]), /问题已变化/);
+  assert.throws(() => resolveStandardScopeAnswers(round, [answer, answer]), /答案重复/);
+  const { scopeChoices: _, ...untyped } = round.questions[0]!;
+  assert.throws(() => resolveStandardScopeAnswers({ ...round, questions: [untyped] }, [answer]), /缺少模型类型标识/);
+  assert.throws(() => resolveStandardScopeAnswers({ ...round, questions: [{ ...round.questions[0]!, multiple: true }] }, [{ ...answer, selectedOptionIds: ["add", "skip"] }]), /不能与其他模型选项/);
+});

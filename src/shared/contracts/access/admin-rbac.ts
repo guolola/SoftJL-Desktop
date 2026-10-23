@@ -1,0 +1,191 @@
+// Defines admin RBAC roles, permissions, data scopes, and capabilities shared across apps.
+import { z } from "zod";
+
+export const adminRoleSchema = z.enum([
+  "super_admin",
+  "system_operator",
+  "project_admin",
+  "auditor",
+  "security_admin",
+  "model_admin",
+]);
+export type AdminRole = z.infer<typeof adminRoleSchema>;
+
+export const adminPermissionSchema = z.enum([
+  "admin.metrics.read",
+  "admin.evaluations.read",
+  "admin.evaluations.review",
+  "admin.roles.write",
+  "admin.users.read",
+  "admin.users.write",
+  "admin.admin_invitations.write",
+  "admin.projects.read",
+  "admin.projects.write",
+  "admin.runs.read",
+  "admin.runs.write",
+  "admin.documents.read",
+  "admin.documents.write",
+  "admin.provider_configs.read",
+  "admin.provider_configs.write",
+  "admin.audit_logs.read",
+  "admin.risk_events.read",
+  "admin.rate_limits.read",
+  "admin.rate_limits.write",
+  "admin.system_health.read",
+  "admin.prompt_runtime.write",
+  "admin.system_notices.read",
+  "admin.system_notices.write",
+]);
+export type AdminPermission = z.infer<typeof adminPermissionSchema>;
+
+export const adminDataScopeSchema = z.enum([
+  "all_projects",
+  "all_users",
+  "system",
+  "assigned_projects",
+  "audit_logs",
+  "provider_configs",
+]);
+export type AdminDataScope = z.infer<typeof adminDataScopeSchema>;
+
+export const adminCapabilitySchema = z.enum([
+  "viewDashboard",
+  "viewEvaluations",
+  "reviewEvaluations",
+  "viewUsers",
+  "manageUsers",
+  "viewProjects",
+  "manageProjects",
+  "viewRuns",
+  "manageRuns",
+  "viewDocuments",
+  "manageDocuments",
+  "viewProviderConfigs",
+  "manageProviderConfigs",
+  "viewAuditLogs",
+  "viewRiskEvents",
+  "viewRateLimits",
+  "viewSystemHealth",
+]);
+export type AdminCapability = z.infer<typeof adminCapabilitySchema>;
+
+const allAdminPermissions = adminPermissionSchema.options;
+const allAdminCapabilities = adminCapabilitySchema.options;
+
+export const adminRolePermissions = {
+  super_admin: allAdminPermissions,
+  system_operator: [
+    "admin.metrics.read",
+    "admin.evaluations.read",
+    "admin.projects.read",
+    "admin.projects.write",
+    "admin.runs.read",
+    "admin.runs.write",
+    "admin.documents.read",
+    "admin.rate_limits.read",
+    "admin.system_health.read",
+    "admin.prompt_runtime.write",
+    "admin.system_notices.read",
+    "admin.system_notices.write",
+  ],
+  project_admin: [
+    "admin.projects.read",
+    "admin.projects.write",
+    "admin.runs.read",
+    "admin.runs.write",
+    "admin.documents.read",
+    "admin.documents.write",
+  ],
+  auditor: [
+    "admin.metrics.read",
+    "admin.evaluations.read",
+    "admin.users.read",
+    "admin.projects.read",
+    "admin.runs.read",
+    "admin.documents.read",
+    "admin.audit_logs.read",
+    "admin.risk_events.read",
+    "admin.system_health.read",
+  ],
+  security_admin: [
+    "admin.metrics.read",
+    "admin.roles.write",
+    "admin.users.read",
+    "admin.users.write",
+    "admin.audit_logs.read",
+    "admin.risk_events.read",
+    "admin.rate_limits.read",
+    "admin.rate_limits.write",
+    "admin.system_health.read",
+  ],
+  model_admin: [
+    "admin.metrics.read",
+    "admin.evaluations.read",
+    "admin.evaluations.review",
+    "admin.provider_configs.read",
+    "admin.provider_configs.write",
+    "admin.rate_limits.read",
+    "admin.system_health.read",
+  ],
+} as const satisfies Record<AdminRole, readonly AdminPermission[]>;
+
+export const adminRoleDataScopes = {
+  super_admin: ["all_projects", "all_users", "system"],
+  system_operator: ["all_projects", "system"],
+  project_admin: ["assigned_projects"],
+  auditor: ["audit_logs", "all_projects"],
+  security_admin: ["all_users", "audit_logs", "system"],
+  model_admin: ["provider_configs", "system"],
+} as const satisfies Record<AdminRole, readonly AdminDataScope[]>;
+
+export const adminRoleCapabilities = {
+  super_admin: allAdminCapabilities,
+  system_operator: [
+    "viewDashboard",
+    "viewEvaluations",
+    "viewProjects",
+    "manageProjects",
+    "viewRuns",
+    "manageRuns",
+    "viewDocuments",
+    "viewRateLimits",
+    "viewSystemHealth",
+  ],
+  project_admin: [
+    "viewProjects",
+    "manageProjects",
+    "viewRuns",
+    "manageRuns",
+    "viewDocuments",
+    "manageDocuments",
+  ],
+  auditor: [
+    "viewDashboard",
+    "viewEvaluations",
+    "viewUsers",
+    "viewProjects",
+    "viewRuns",
+    "viewDocuments",
+    "viewAuditLogs",
+    "viewRiskEvents",
+    "viewSystemHealth",
+  ],
+  security_admin: [
+    "viewDashboard",
+    "viewUsers",
+    "manageUsers",
+    "viewAuditLogs",
+    "viewRiskEvents",
+    "viewRateLimits",
+    "viewSystemHealth",
+  ],
+  model_admin: [
+    "viewDashboard",
+    "viewEvaluations",
+    "reviewEvaluations",
+    "viewProviderConfigs",
+    "manageProviderConfigs",
+    "viewRateLimits",
+    "viewSystemHealth",
+  ],
+} as const satisfies Record<AdminRole, readonly AdminCapability[]>;

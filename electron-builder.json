@@ -1,0 +1,55 @@
+{
+  "appId": "com.softjl.desktop",
+  "productName": "SoftJL Desktop",
+  "asar": true,
+  "directories": {
+    "output": "release"
+  },
+  "files": [
+    "dist/**/*",
+    "package.json"
+  ],
+  "extraResources": [
+    {
+      "from": "resources/icon.ico",
+      "to": "icon.ico"
+    },
+    {
+      "from": ".runtime/java",
+      "to": "java"
+    },
+    {
+      "from": "resources/plantuml/plantuml-1.2026.3beta8.jar",
+      "to": "plantuml.jar"
+    },
+    {
+      "from": "LICENSE",
+      "to": "LICENSE"
+    },
+    {
+      "from": "NOTICE",
+      "to": "NOTICE"
+    }
+  ],
+  "win": {
+    "icon": "resources/icon.ico",
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "artifactName": "SoftJL-Desktop-${version}-Setup.${ext}"
+  },
+  "nsis": {
+    "installerIcon": "resources/icon.ico",
+    "uninstallerIcon": "resources/icon.ico",
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true
+  },
+  "npmRebuild": false
+}

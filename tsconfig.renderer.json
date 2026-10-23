@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": [
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@/lib/utils": [
+        "./src/renderer/src/shared/ui/utils.ts"
+      ],
+      "@/components/ui/*": [
+        "./src/renderer/src/shared/ui/*"
+      ],
+      "@/*": [
+        "./src/renderer/src/*"
+      ],
+      "@test/*": [
+        "./tests/renderer/*"
+      ]
+    },
+    "allowJs": true,
+    "strict": false,
+    "incremental": false,
+    "esModuleInterop": true,
+    "noUnusedLocals": true,
+    "disableSourceOfProjectReferenceRedirect": true
+  },
+  "include": [
+    "src/renderer",
+    "src/shared/bridge.ts",
+    "tests/renderer"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/renderer/src/assets/data"
+  ],
+  "extends": "./tsconfig.json",
+  "references": [
+    {
+      "path": "./tsconfig.contracts.json"
+    }
+  ]
+}

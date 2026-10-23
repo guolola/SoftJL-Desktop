@@ -1,0 +1,16 @@
+/* Fits the draggable capability badges above the conversation composer. */
+.homepage-theme.homepage-theme.homepage-conversation .agent-intro-badges {
+  flex-shrink: 0;
+  margin-bottom: -0.75rem;
+}
+
+.homepage-theme.homepage-theme.homepage-conversation .agent-intro-badges > div {
+  width: 100%;
+  max-width: none;
+  height: 8rem;
+}
+
+/* The introduction now lives in a dialog and follows the application's light and dark surfaces. */
+.agent-feature-showcase [data-slot="card"]:not(.dark *) {
+  background-color: color-mix(in oklab, var(--muted) 70%, var(--background));
+}

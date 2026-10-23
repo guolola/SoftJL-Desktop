@@ -1,0 +1,98 @@
+/* Keeps native caption buttons, route tools and the sidebar in one desktop window frame. */
+:root {
+  --desktop-titlebar-height: env(titlebar-area-height, 48px);
+  --desktop-workspace-height: calc(100dvh - var(--desktop-titlebar-height));
+}
+
+html { scrollbar-gutter: auto; }
+html, body, #root { height: 100%; overflow: hidden; }
+.desktop-frame { height: 100%; display: flex; flex-direction: column; background: var(--background); color: var(--foreground); }
+.desktop-titlebar {
+  height: var(--desktop-titlebar-height);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  /* Preserve the native Windows controls, including Snap Layouts on maximize. */
+  padding-right: calc(100vw - env(titlebar-area-width, calc(100vw - 144px)) + 8px);
+  background: var(--sidebar);
+  color: var(--sidebar-foreground);
+  border-bottom: 1px solid var(--sidebar-border);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+.desktop-application-menu {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  height: 32px; padding: 0 8px; border-radius: 6px;
+  font-size: 13px; font-weight: 600;
+  -webkit-app-region: no-drag;
+}
+.desktop-application-menu:hover { background: var(--sidebar-accent); }
+.desktop-application-menu:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.desktop-toolbar-host { flex: 1; min-width: 0; height: 100%; }
+.desktop-toolbar { display: flex; height: 100%; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; }
+.desktop-toolbar-navigation { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.desktop-toolbar-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+.desktop-toolbar button, .desktop-toolbar a, .desktop-toolbar [role="button"] { -webkit-app-region: no-drag; }
+.desktop-toolbar-actions [data-slot="button"] { height: 32px; }
+.desktop-toolbar-actions [data-slot="button"].size-9 { width: 32px; }
+.desktop-workspace { flex: 1; height: var(--desktop-workspace-height); min-height: 0; overflow: auto; }
+/* Onborda's block wrappers must carry the window height through to the chat viewport. */
+.desktop-workspace [data-name="onborda-wrapper"],
+.desktop-workspace [data-name="onborda-site"] { height: 100%; min-height: 0; }
+.desktop-workspace [data-slot="sidebar-wrapper"],
+.desktop-workspace [data-slot="workspace-layout"] { height: 100%; min-height: 0; }
+.desktop-workspace [data-slot="workspace-layout"] { overflow: hidden; }
+.desktop-workspace [data-slot="sidebar-container"] {
+  top: var(--desktop-titlebar-height); bottom: 0;
+  height: var(--desktop-workspace-height);
+}
+.desktop-workspace [data-slot="sidebar-inner"] { padding-top: 8px; }
+.desktop-workspace [data-slot="sidebar-inset"] { min-height: 0; }
+.desktop-workspace [data-slot="sidebar-inset"] > main { min-height: 0; overflow-y: auto; }
+
+/* Transparent tracks and small rounded thumbs match the quiet scrollbar reference in both themes. */
+:root[data-desktop-shell] {
+  --desktop-scroll-thumb: color-mix(in srgb, var(--muted-foreground) 28%, transparent);
+  --desktop-scroll-thumb-hover: color-mix(in srgb, var(--muted-foreground) 48%, transparent);
+}
+html[data-desktop-shell] * { scrollbar-width: thin; scrollbar-color: var(--desktop-scroll-thumb) transparent; }
+html[data-desktop-shell] *:hover { scrollbar-color: var(--desktop-scroll-thumb-hover) transparent; }
+html[data-desktop-shell] [data-slot="sidebar-content"] { scrollbar-width: thin; }
+html[data-desktop-shell] .no-scrollbar, html[data-desktop-shell] .\[scrollbar-width\:none\] { scrollbar-width: none; }
+html[data-desktop-shell] .homepage-theme.homepage-theme.homepage-theme * { scrollbar-color: var(--desktop-scroll-thumb) transparent; }
+html[data-desktop-shell] .homepage-theme.homepage-theme.homepage-theme *:hover { scrollbar-color: var(--desktop-scroll-thumb-hover) transparent; }
+html[data-desktop-shell] [data-slot="scroll-area-thumb"] { background: var(--desktop-scroll-thumb); }
+html[data-desktop-shell] [data-slot="scroll-area-thumb"]:hover { background: var(--desktop-scroll-thumb-hover); }
+/* Chromium's system "thin" bar still has arrow buttons on Windows; draw the quiet 6px thumb explicitly. */
+@supports selector(::-webkit-scrollbar) {
+  html[data-desktop-shell] *,
+  html[data-desktop-shell] *:hover,
+  html[data-desktop-shell] .homepage-theme.homepage-theme.homepage-theme *,
+  html[data-desktop-shell] .homepage-theme.homepage-theme.homepage-theme *:hover {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+  html[data-desktop-shell] *::-webkit-scrollbar { width: 8px; height: 8px; }
+  html[data-desktop-shell] *::-webkit-scrollbar-track,
+  html[data-desktop-shell] *::-webkit-scrollbar-corner { background: transparent; }
+  html[data-desktop-shell] *::-webkit-scrollbar-thumb {
+    min-height: 32px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: var(--desktop-scroll-thumb);
+    background-clip: padding-box;
+  }
+  html[data-desktop-shell] *::-webkit-scrollbar-thumb:hover { background-color: var(--desktop-scroll-thumb-hover); }
+  html[data-desktop-shell] *::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+  html[data-desktop-shell] .no-scrollbar,
+  html[data-desktop-shell] .\[scrollbar-width\:none\] { scrollbar-width: none; }
+  html[data-desktop-shell] [data-slot="sidebar-content"].no-scrollbar { scrollbar-width: auto; }
+  html[data-desktop-shell] [data-slot="sidebar-content"]::-webkit-scrollbar { display: block; }
+}
+@media (forced-colors: active) {
+  html[data-desktop-shell] *, html[data-desktop-shell] .homepage-theme.homepage-theme.homepage-theme * { scrollbar-color: auto; }
+  html[data-desktop-shell] [data-slot="scroll-area-thumb"] { background: CanvasText; }
+  html[data-desktop-shell] *::-webkit-scrollbar-thumb { background: CanvasText; }
+}

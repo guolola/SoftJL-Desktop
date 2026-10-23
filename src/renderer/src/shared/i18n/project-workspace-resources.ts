@@ -1,0 +1,7 @@
+// Explains where a project's generated code will be written and when its native folder grant can change.
+export const projectWorkspaceZh = {
+  title: "项目工作区", choose: "选择文件夹", change: "更换文件夹", clear: "取消关联", unselected: "尚未选择代码工作区", hint: "后续生成的代码和项目内文件操作使用此目录。未选择时，需要先设置工作区再编码。", desktopOnly: "请在桌面应用中使用本机文件夹选择器。", permission: "仅项目所有者可以修改工作区。", inactive: "恢复项目后可以修改工作区。", busy: "请先停止当前任务，再更换工作区。", failed: "无法设置项目工作区，请重试。", savedImmediately: "选择后立即保存；不会移动或删除原目录中的文件。", createdButNotAssigned: "项目已创建，工作区尚未保存：{{message}}。可重新选择后再次提交，不会重复创建项目。",
+};
+export const projectWorkspaceEn: Record<keyof typeof projectWorkspaceZh, string> = {
+  title: "Project workspace", choose: "Choose folder", change: "Change folder", clear: "Unlink", unselected: "No code workspace selected", hint: "Generated code and project file operations use this directory. Select a workspace before coding.", desktopOnly: "Use the native folder picker in the desktop application.", permission: "Only the project owner can change the workspace.", inactive: "Restore the project before changing its workspace.", busy: "Stop the current task before changing the workspace.", failed: "Unable to set the project workspace. Try again.", savedImmediately: "Saved immediately after selection. Existing files are not moved or deleted.", createdButNotAssigned: "The project was created, but its workspace was not saved: {{message}}. Choose again and retry; the project will not be created twice.",
+};

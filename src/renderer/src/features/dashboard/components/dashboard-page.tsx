@@ -1,0 +1,35 @@
+// Uses the supplied dashboard-shell-06 content inside the existing authenticated navigation shell.
+import { useMemo } from 'react'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/shared/ui/alert'
+import { Button } from '@/shared/ui/button'
+import { PageContainer } from '@/shared/template/layout/page'
+import { DashboardShellContent, DashboardShellSkeleton } from '@/shared/template/blocks/dashboard-shell-06/dashboard-shell-content'
+import { useDashboardLabels } from '@/shared/template/blocks/dashboard-shell-06/dashboard-shell-labels'
+import { useDashboardSummary } from '../hooks/use-dashboard-summary.js'
+import { buildDashboardViewModel } from '../lib/dashboard-view-model.js'
+import { useDashboardDuration } from '../hooks/use-dashboard-duration.js'
+import { useAuthenticatedRouteSession } from '@/features/user-platform/components/authenticated-route-session'
+import { DashboardWelcome } from './dashboard-welcome.js'
+import { buildDashboardWelcomeExample } from '../lib/dashboard-welcome-example.js'
+
+export function DashboardPage({ onNavigate }: { onNavigate: (path: string) => void }) {
+  const { t, locale } = useDashboardLabels()
+  const { data, loading, error, reload } = useDashboardSummary()
+  const duration = useDashboardDuration(data, t)
+  const example = useMemo(() => data ? buildDashboardWelcomeExample(data) : null, [data])
+  const exampleDuration = useDashboardDuration(example, t)
+  const session = useAuthenticatedRouteSession()
+  // Match the other platform pages' centered content rail and the header's inner width.
+  return <main data-testid='dashboard-shell' className='relative min-h-0 min-w-0 w-full overflow-x-clip bg-background' aria-busy={loading}>
+    {loading ? <PageContainer><DashboardShellSkeleton /></PageContainer> : error ? <PageContainer><Alert variant='destructive'>
+      <AlertTitle>{t('error')}</AlertTitle><AlertDescription>{error}</AlertDescription>
+      <AlertAction><Button variant='outline' onClick={reload}>{t('retry')}</Button></AlertAction>
+    </Alert></PageContainer> : data ? <DashboardWelcome key={session?.user.id ?? 'dashboard'} userId={session?.user.id}>{(renderCard, welcomeActive) => <>
+      {/* Examples fill the same real widgets only while welcome is active; completion exposes the actual account. */}
+      <DashboardShellContent data={buildDashboardViewModel(welcomeActive && example ? example : data, t, locale)}
+        duration={welcomeActive && example ? exampleDuration : duration} onRefresh={() => { if (!welcomeActive) reload() }}
+        onProject={id => { if (!welcomeActive) onNavigate(id ? `/projects/${encodeURIComponent(id)}` : '/projects') }}
+        onHistory={id => { if (!welcomeActive) onNavigate(`/projects/${encodeURIComponent(id)}/history`) }} labels={{ recent: t('recent') }} renderCard={renderCard} />
+    </>}</DashboardWelcome> : null}
+  </main>
+}

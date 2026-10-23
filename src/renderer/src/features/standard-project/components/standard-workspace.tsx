@@ -1,0 +1,61 @@
+// Composes saved project diagrams, tests and documents inside the platform shell.
+import { useTranslation } from "react-i18next";
+import { useRef, useState, type ReactNode } from "react";
+import { DefaultPagesLayout } from "../../../shared/template/layout/default-pages-layout.js";
+import { ProjectSidebar } from "../../workspace-shell/components/project-sidebar.js";
+import { useSidebar } from "../../../shared/ui/sidebar.js";
+import type { ProjectRouteSection } from "../../../shared/lib/app-route-types.js";
+import { StandardSidebar } from "./standard-sidebar.js";
+import { Button } from "../../../shared/ui/button.js";
+import { useStandardProject } from "../hooks/use-standard-project.js";
+import { StandardTestsPage } from "./standard-tests-page.js";
+import { StandardDocumentsPage } from "./standard-documents-page.js";
+import { StandardDiagramDetailPage } from "./standard-diagram-detail-page.js";
+import { ConnectionState } from "./elements/connection-state.js";
+import { ProjectConversation } from "./project-conversation.js";
+import { QuickModelingIntroDialog } from "./quick-modeling-intro-dialog.js";
+import { useAuthenticatedRouteSession } from "../../user-platform/components/authenticated-route-session.js";
+
+type View = "home" | "tests" | "documents";
+
+export function StandardWorkspace({ projectId, canEdit, header, onNavigate, onOpenAccount, sectionContent, projectSection }: {
+  projectId: string;  canEdit: boolean; header: ReactNode;
+  onNavigate: (path: string) => void;  onOpenAccount: () => void;
+  sectionContent?: ReactNode; projectSection?: ProjectRouteSection | null;
+}) {
+  const { t } = useTranslation();
+  const account = useAuthenticatedRouteSession();
+  const session = useStandardProject(projectId, canEdit);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState<View>("home");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { setOpenMobile } = useSidebar();
+  const { state, pending, running } = session;
+  const disconnected = session.connection === "dropped" || session.connection === "reconnecting";
+  const disabled = !canEdit || pending || running || disconnected;
+  const diagrams = Object.values(state?.diagrams ?? {});
+  const showConversation = !sectionContent && !selectedId && view === "home";
+  const selectView = (next: View) => { setView(next); setSelectedId(null); setOpenMobile(false); if (sectionContent) onNavigate(`/projects/${encodeURIComponent(projectId)}`); };
+  const selected = selectedId ? state?.diagrams[selectedId] : undefined;
+  return <DefaultPagesLayout header={header} className="h-svh overflow-hidden" contentClassName="flex min-h-0 flex-col overflow-y-auto p-0 sm:p-0" sidebar={
+    <ProjectSidebar onOpenAccount={onOpenAccount} onNavigate={onNavigate}>
+      <StandardSidebar projectId={projectId} diagrams={diagrams} state={state} view={view} selectedId={selectedId} section={projectSection} onSelect={selectView}
+        onDiagram={diagram => { setView("home"); setSelectedId(diagram.id); setOpenMobile(false); if (sectionContent) onNavigate(`/projects/${encodeURIComponent(projectId)}`); }} onNavigate={onNavigate} />
+    </ProjectSidebar>
+  }>
+    <div ref={contentRef} data-testid="standard-project-content" className="flex min-h-0 min-w-0 flex-1 flex-col text-foreground">
+      {!state ? <div className="p-8" role="status">{session.error || t("standardProject.loading")}<ConnectionState phase={session.connection} onRetry={() => void session.reconnect()} /><Button variant="link" onClick={() => void session.refresh()}>{t("standardProject.reload")}</Button></div> : <>
+        {canEdit && showConversation && <QuickModelingIntroDialog key={`intro:${projectId}`} projectId={projectId} contentRef={contentRef} />}
+        {!showConversation && <>
+          {!canEdit && <p className="px-6 py-3 text-sm text-muted-foreground">{t("standardProject.readOnly")}</p>}
+          <ConnectionState phase={session.connection} onRetry={() => void session.reconnect()} className="m-3" />
+        </>}
+        {sectionContent ?? (selected ? <StandardDiagramDetailPage key={`${projectId}:${selected.id}`} diagram={selected} disabled={disabled} canEdit={canEdit} onSave={model => session.saveModel(selected.id, model)} />
+        : view === "home" ? <ProjectConversation key={projectId} projectId={projectId} state={state} canEdit={canEdit} disabled={disabled} canCancel={canEdit && !pending && !disconnected}
+          displayName={account?.user.displayName} onSend={session.start} onCancel={session.cancel} onFeedback={session.feedback} />
+        : view === "tests" ? <StandardTestsPage state={state} />
+        : <StandardDocumentsPage state={state} disabled={disabled} />)}
+      </>}
+    </div>
+  </DefaultPagesLayout>;
+}

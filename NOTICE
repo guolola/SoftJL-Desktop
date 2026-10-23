@@ -1,0 +1,39 @@
+SoftJL
+Copyright (c) 2026 软件工程实践平台
+
+Project-authored code and documentation are licensed under the Apache License,
+Version 2.0. See LICENSE for the complete terms.
+
+Third-party components and assets retain their own copyrights and licenses.
+This notice does not relicense them. In particular:
+
+- Fonts in resources/public/templates/fonts/ are covered by the SIL Open Font
+  License 1.1; see resources/public/templates/fonts/LICENSE.txt.
+- Devicon assets retain their MIT license and attribution; see
+  resources/public/marketing/logos/devicon-license.txt.
+- The bundled PlantUML runtime in resources/plantuml/ retains its upstream
+  licensing, including the notices and licenses embedded in the JAR.
+  Upstream project and source: https://github.com/plantuml/plantuml
+  Upstream license information: https://plantuml.com/license
+- Package dependencies retain the licenses distributed by their respective
+  authors. Consult each dependency's license and notices when redistributing.
+- Shadcn Studio / CleVision Technologies Private Limited owns the upstream
+  Flow 2.0.0 and AdminCN full-navbar-layout 1.0.0 templates and Studio blocks.
+  Adapted AdminCN sources: src/renderer/src/shared/ui/ and src/renderer/src/shared/template/.
+  Source URLs and original hashes: src/renderer/src/shared/ui/template-sources.json.
+  Applicable upstream terms: https://shadcnstudio.com/license
+  These templates and blocks are not relicensed under Apache-2.0. Upstream paid
+  resource terms permit qualifying open-source end products and restrict separate
+  redistribution of resources or derived templates/UI libraries. A source hash
+  records origin, not proof of a purchased license; maintainers must retain the
+  applicable acquisition/license records and upstream notices for redistribution.
+- The assistant-ui derived conversation components retain their MIT notices;
+  see src/renderer/src/features/standard-project/components/assistant-ui.LICENSE
+  and src/renderer/src/features/standard-project/components/home-demo/LICENSE.
+  Public Sans and JetBrains Mono are distributed through their Fontsource
+  packages under their respective font licenses, including SIL OFL 1.1.
+
+These entries identify licensing boundaries and are not an exhaustive inventory
+of third-party components or their redistribution obligations.
+
+Desktop distribution: personal local use without platform billing or team accounts.

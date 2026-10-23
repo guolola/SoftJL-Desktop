@@ -1,0 +1,60 @@
+// Shared overlay presentation extracted from the quick-modeling selector; see home-demo/LICENSE.
+"use client";
+import { ModelSelectorPresentationContext } from "./model-selection.js";
+
+import * as React from "react";
+import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
+
+import { cn } from "./utils.js";
+
+function Popover({ ...props }: PopoverPrimitive.Root.Props) {
+  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
+}
+
+function PopoverTrigger({ ...props }: PopoverPrimitive.Trigger.Props) {
+  return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />;
+}
+
+const PopoverContent = React.forwardRef<
+  HTMLDivElement,
+  PopoverPrimitive.Popup.Props &
+    Pick<
+      PopoverPrimitive.Positioner.Props,
+      "align" | "alignOffset" | "side" | "sideOffset"
+    >
+>(function PopoverContent(
+  {
+    className,
+    align = "center",
+    alignOffset = 0,
+    side = "bottom",
+    sideOffset = 4,
+    ...props
+  },
+  ref,
+) {
+  const { portalContainer } = React.useContext(ModelSelectorPresentationContext);
+  return (
+    <PopoverPrimitive.Portal container={portalContainer}>
+      <PopoverPrimitive.Positioner
+        align={align}
+        alignOffset={alignOffset}
+        side={side}
+        sideOffset={sideOffset}
+        className="isolate z-50"
+      >
+        <PopoverPrimitive.Popup
+          ref={ref}
+          data-slot="popover-content"
+          className={cn(
+            "bg-popover text-popover-foreground ring-foreground/10 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 z-50 flex w-72 origin-(--transform-origin) flex-col gap-2.5 rounded-[var(--radius-surface,var(--radius-lg))] p-3 text-sm ring-1 outline-hidden duration-100",
+            className,
+          )}
+          {...props}
+        />
+      </PopoverPrimitive.Positioner>
+    </PopoverPrimitive.Portal>
+  );
+});
+
+export { Popover, PopoverContent, PopoverTrigger };

@@ -1,0 +1,17 @@
+name: Desktop verification
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm run test:desktop
+      - run: npm run test:renderer -- src/renderer/src/app/app-routes.test.ts src/renderer/src/features/coding-agent
+      - run: npm run audit:docs
