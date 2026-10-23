@@ -1,56 +1,61 @@
-// Adds directory selection, prerequisite advice and explicit reviews inside the existing modeling conversation.
+// Renders Pi's native dialog protocol with official assistant-ui registry components.
+import { CodeDiff, type DiffLine } from "../../../shared/assistant-ui/elements/code-diff.js";
+import { useState } from "react";
 import type { StandardProjectState } from "../../../../../shared/contracts/index.js";
+import type { ConversationApproval } from "../../../../../shared/contracts/workspace/conversation-coding.js";
 import { useTranslation } from "react-i18next";
-import { codingArtifactAdvice } from "../../../../../shared/contracts/workspace/conversation-coding.js";
 import { Button } from "../../../shared/ui/button.js";
 import type { useConversationCoding } from "../hooks/use-conversation-coding.js";
 import { ApprovalCard } from "../../../shared/assistant-ui/elements/approval-card.js";
-import { CodeDiff, type DiffLine } from "../../../shared/assistant-ui/elements/code-diff.js";
+import { OptionList } from "../../../shared/assistant-ui/elements/option-list.js";
+import { ElicitationForm } from "../../../shared/assistant-ui/elements/elicitation-form.js";
 
-export function ConversationCoding({ coding, state, canEdit, disabled, canCancel, onCancel }: {
-  coding: ReturnType<typeof useConversationCoding>; state: StandardProjectState; canEdit: boolean; disabled: boolean; canCancel: boolean; onCancel: () => Promise<unknown>;
+type Coding = ReturnType<typeof useConversationCoding>;
+function PluginDialog({ prompt, coding, disabled }: { prompt: ConversationApproval; coding: Coding; disabled: boolean }) {
+  const [value, setValue] = useState(prompt.initialValue ?? "");
+  const { i18n } = useTranslation();
+  const zh = i18n.language.startsWith("zh");
+  const answer = (value: string | boolean | null) => { if (!disabled) return coding.decide(prompt.id, prompt.runId, value); };
+  const send = (value: string | boolean | null) => { void Promise.resolve(answer(value)).catch(() => {}); };
+  const args = prompt.arguments ?? {};
+  const edits = prompt.tool === "edit" && Array.isArray(args.edits) ? args.edits : [];
+  const lines: DiffLine[] = edits.flatMap((edit: { oldText?: string; newText?: string }) => [
+    ...(typeof edit.oldText === "string" ? edit.oldText.split("\n").map(text => ({ kind: "removed" as const, text })) : []),
+    ...(typeof edit.newText === "string" ? edit.newText.split("\n").map(text => ({ kind: "added" as const, text })) : []),
+  ]);
+  return <fieldset disabled={disabled} className="my-2 min-w-0 rounded-lg border bg-background p-3">
+    {lines.length > 0 && <CodeDiff filename={String(args.path ?? "修改片段")} lines={lines} additions={lines.filter(line => line.kind === "added").length}
+      deletions={lines.filter(line => line.kind === "removed").length} cycle={0} animate={false} className="mb-2 max-w-none" />}
+    {typeof args.command === "string" && <pre className="mb-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-xs">{args.command}</pre>}
+    {prompt.dialog === "select" ? <>
+      <p className="mb-2 max-h-64 overflow-auto whitespace-pre-wrap break-words text-sm">{prompt.title}</p>
+      <OptionList aria-label={prompt.title} options={(prompt.options ?? []).map((label, index) => ({ id: String(index), label }))}
+        onConfirm={async ids => { const choice = prompt.options?.[Number(ids[0])]; if (choice !== undefined) await answer(choice); }} className="max-w-none" />
+      <Button variant="ghost" size="sm" onClick={() => send(null)}>{zh ? "取消" : "Cancel"}</Button>
+    </> : prompt.dialog === "input" ? <ElicitationForm server="Pi" message={prompt.title} state="request"
+      fields={[{ name: "answer", label: prompt.placeholder || (zh ? "回答" : "Answer"), value, kind: "text", multiline: prompt.multiline }]}
+      onFieldChange={(_name, text) => setValue(text)} onAccept={() => send(value)} onDecline={() => send(null)} className="max-w-none" />
+      : <ApprovalCard state="request" title={prompt.title} subtitle={zh ? "等待确认" : "Awaiting confirmation"} description={prompt.detail} allowOnceLabel={zh ? "确认" : "Confirm"} denyLabel={zh ? "取消" : "Cancel"}
+        onAllowOnce={() => send(true)} onDeny={() => send(false)} className="max-w-none" />}
+  </fieldset>;
+}
+export function ConversationCoding({ coding, state, canEdit, canCancel, onCancel }: {
+  coding: Coding; state: StandardProjectState; canEdit: boolean; canCancel: boolean; onCancel: () => Promise<unknown>;
 }) {
   const { i18n } = useTranslation();
-  const zh = i18n.language?.startsWith("zh") ?? true;
+  const zh = i18n.language.startsWith("zh");
   const text = (chinese: string, english: string) => zh ? chinese : english;
   if (!coding.available) return null;
-  const running = state.run?.status === "running" || coding.status.busy;
-  const advice = codingArtifactAdvice(state, zh ? "zh-CN" : "en");
-  const approvals = coding.status.approvals.filter(item => item.runId === state.run?.id && state.run.status === "running");
-  const switchBlocked = !canEdit || disabled || running || coding.pending || !coding.connected;
+  const prompts = coding.status.approvals.filter(item => item.runId === state.run?.id && state.run.status === "running");
+  const notices = coding.status.notices?.filter(notice => notice.level !== "info") ?? [];
+  // Directory management belongs to project creation/settings; chat only hosts live interactions.
+  if (!coding.error && notices.length === 0 && prompts.length === 0) return null;
   return <section aria-label={text("会话编码", "Conversation coding")} className="mx-auto w-full max-w-3xl shrink-0 border-b px-4 py-2 text-sm">
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="min-w-0 flex-1 break-all">{text("代码目录：", "Code directory: ")}{coding.status.directory ?? text("尚未选择", "Not selected")}</span>
-      <Button type="button" variant="outline" size="sm" disabled={switchBlocked} onClick={() => { if (!switchBlocked) void coding.choose(); }}>{coding.status.directory ? text("更换代码目录", "Change code directory") : text("选择代码目录", "Choose code directory")}</Button>
-      {coding.status.directory && <Button type="button" variant="ghost" size="sm" disabled={switchBlocked} onClick={() => { if (!switchBlocked) void coding.clear(); }}>{text("取消目录授权", "Revoke directory access")}</Button>}
-    </div>
-    {coding.status.directory ? <p className="mt-1 text-xs text-muted-foreground">{text("直接在下方对话里提出编码需求。读写文件和运行命令都需要逐次确认；停止会保留已完成的修改。", "Ask for code in this conversation. File operations and commands require individual approval. Stopping keeps completed edits.")}{running ? text(" 更换目录前请先停止任务。", " Stop the current task before changing directories.") : ""}</p>
-      : <p className="mt-1 text-xs text-muted-foreground">{text("选择本机项目目录后，可在当前建模会话中编码和运行测试。", "Choose a local project directory to code and run tests in this modeling conversation.")}</p>}
-    {coding.status.directory && advice && <p role="note" className="mt-1 text-xs text-amber-700 dark:text-amber-400">{advice}</p>}
     {coding.error && <p role="alert" className="mt-1 text-destructive">{coding.error}</p>}
-    {approvals.length > 0 && <div className="max-h-[40vh] overflow-y-auto" aria-live="polite">
-      {approvals.map(approval => <article key={approval.id} aria-label={text("待审批操作", "Pending operation approval")} className="my-2 rounded-lg border bg-background p-3">
-        {approval.changes && (() => {
-          const lines: DiffLine[] = approval.changes.flatMap(change => [
-            ...change.oldText.split("\n").filter((text, index, all) => text || all.length > 1).map(text => ({ kind: "removed" as const, text })),
-            ...change.newText.split("\n").filter((text, index, all) => text || all.length > 1).map(text => ({ kind: "added" as const, text })),
-          ]);
-          return <CodeDiff filename={approval.path ?? text("项目文件", "Project file")} lines={lines} additions={lines.filter(line => line.kind === "added").length}
-            deletions={lines.filter(line => line.kind === "removed").length} cycle={0} animate={false} className="mb-2 max-h-64 max-w-none overflow-auto" />;
-        })()}
-        <fieldset disabled={!canEdit || coding.pending || !coding.connected} className="min-w-0">
-          <ApprovalCard state="request" title={text(`助手请求：${approval.title}`, `Assistant request: ${approval.tool}`)} subtitle={text("等待你的本次操作审批", "Waiting for your approval of this operation")}
-            description={zh ? approval.warning : [approval.tool === "project_command" ? "This command runs with your Windows user privileges and can access files outside the directory or the network." : "", advice].filter(Boolean).join("\n")} command={approval.changes ? undefined : approval.detail}
-            details={[{ label: text("工作目录", "Working directory"), value: approval.directory }, ...(approval.path ? [{ label: text("文件", "File"), value: approval.path }] : [])]}
-            allowOnceLabel={approval.warning?.includes("当前缺少") ? text("仍然继续并允许本次操作", "Continue and allow this operation") : text("允许本次操作", "Allow this operation")} denyLabel={text("拒绝本次操作", "Deny this operation")}
-            onAllowOnce={() => { if (canEdit && !coding.pending && coding.connected) void coding.decide(approval.id, approval.runId, true); }}
-            onDeny={() => { if (canEdit && !coding.pending && coding.connected) void coding.decide(approval.id, approval.runId, false); }}
-            className="max-w-none [&_p]:whitespace-pre-wrap [&_.font-mono]:max-h-48 [&_.font-mono]:overflow-auto [&_.font-mono]:whitespace-pre-wrap [&_.font-mono]:break-all" />
-        </fieldset>
-        <div className="mt-2 flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="ghost" disabled={!canCancel} onClick={() => { if (canCancel) void onCancel(); }}>{text("停止本轮任务", "Stop this turn")}</Button>
-        </div>
-      </article>)}
+    {notices.map(notice => <p key={notice.id} role="alert" className="mt-1 text-xs text-destructive">{notice.message}</p>)}
+    {prompts.length > 0 && <div className="max-h-[45vh] overflow-y-auto" aria-live="polite">
+      {prompts.map(prompt => <PluginDialog key={prompt.id} prompt={prompt} coding={coding} disabled={!canEdit || coding.pending || !coding.connected} />)}
+      <Button variant="ghost" size="sm" disabled={!canCancel} onClick={() => { if (canCancel) void onCancel(); }}>{text("停止本轮任务", "Stop this turn")}</Button>
     </div>}
   </section>;
 }

@@ -28,6 +28,7 @@ This notice does not relicense them. In particular:
   records origin, not proof of a purchased license; maintainers must retain the
   applicable acquisition/license records and upstream notices for redistribution.
 - The assistant-ui derived conversation components retain their MIT notices;
+  the directly imported Elements license is included in dist/renderer/licenses/assistant-ui-elements.txt;
   see src/renderer/src/features/standard-project/components/assistant-ui.LICENSE
   and src/renderer/src/features/standard-project/components/home-demo/LICENSE.
   Public Sans and JetBrains Mono are distributed through their Fontsource

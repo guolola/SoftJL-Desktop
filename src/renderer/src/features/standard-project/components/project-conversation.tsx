@@ -49,7 +49,7 @@ export function ProjectConversation({ projectId, state, disabled, canCancel, can
         {/* The embedded theme maps body styles onto this root; let the host canvas show through. */}
         <div className="homepage-theme homepage-conversation flex min-h-0 min-w-0 flex-col" style={{ "--thread-max-width": "42rem", backgroundColor: "transparent", overflow: "hidden" } as CSSProperties}
           onChangeCapture={event => { if (event.target instanceof HTMLTextAreaElement && event.target.hasAttribute("data-composer-input")) saveConversationDraft(projectId, event.target.value); }}>
-          <ConversationCoding coding={coding} state={state} canEdit={canEdit} disabled={disabled} canCancel={canCancel} onCancel={onCancel} />
+          <ConversationCoding coding={coding} state={state} canEdit={canEdit} canCancel={canCancel} onCancel={onCancel} />
           <div className="min-h-0 flex-1"><DraftBinding projectId={projectId} /><CommandInstructions /><Thread /></div>
         </div>
       </HomeDemoPortals>

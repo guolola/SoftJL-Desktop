@@ -26,7 +26,11 @@
     "test:prompts": "tsx --test \"src/main/prompts/**/*.test.ts\"",
     "test:renderer": "vitest run --config vitest.config.ts",
     "smoke": "node scripts/smoke.mjs",
-    "audit:docs": "node scripts/audit/documentation.mjs"
+    "audit:docs": "node scripts/audit/documentation.mjs",
+    "postinstall": "patch-package --error-on-fail",
+    "test:pi-packaging": "node --test tests/desktop/pi-fff-packaging.test.mjs",
+    "test:pi-history": "node --test tests/desktop/pi-compaction-file-history.test.mjs",
+    "verify:pi-live": "npm run build && node scripts/verify-pi-live.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.3.0",
@@ -37,6 +41,9 @@
     "@fastify/cors": "10.1.0",
     "@fastify/multipart": "^10.0.0",
     "@fastify/static": "^8.3.0",
+    "@gotgenes/pi-permission-system": "41.0.0",
+    "@gotgenes/pi-subagents": "25.0.1",
+    "@juicesharp/rpiv-ask-user-question": "2.13.9",
     "bullmq": "^5.79.0",
     "docx": "^9.6.1",
     "fastify": "5.12.7",
@@ -46,6 +53,9 @@
     "openai": "^6.44.0",
     "pdfkit": "^0.20.2",
     "pg": "^8.21.0",
+    "pi-custom-compaction": "0.2.5",
+    "pi-fff": "0.1.13",
+    "pi-web-access": "0.44.0",
     "saxes": "^6.0.0",
     "svg-to-pdfkit": "^0.1.8",
     "typebox": "1.3.37",
@@ -62,6 +72,7 @@
     "@lobehub/icons-static-svg": "^1.95.1",
     "@tailwindcss/vite": "^4.1.12",
     "@tanstack/react-table": "^8.21.3",
+    "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "6.6.3",
     "@testing-library/react": "16.3.0",
     "@testing-library/user-event": "14.6.1",
@@ -93,7 +104,9 @@
     "motion": "^12.40.0",
     "next-themes": "0.4.6",
     "onborda": "^1.2.5",
+    "patch-package": "8.0.1",
     "playwright": "1.60.0",
+    "radix-ui": "1.8.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-i18next": "^17.0.9",
@@ -114,5 +127,11 @@
     "vite": "6.4.4",
     "vitest": "4.1.11",
     "zustand": "^5.0.15"
+  },
+  "overrides": {
+    "pi-fff": {
+      "@mariozechner/pi-coding-agent": "npm:@earendil-works/pi-coding-agent@1.3.0",
+      "@mariozechner/pi-tui": "npm:@earendil-works/pi-tui@1.3.0"
+    }
   }
 }

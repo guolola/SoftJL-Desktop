@@ -28,7 +28,8 @@ export type UserStatus = z.infer<typeof userStatusSchema>;
 export const userDtoSchema = z
   .object({
     id: z.string().min(1),
-    username: usernameSchema,
+    // Public identity preserves stored casing; registration/login inputs normalize separately.
+    username: z.string().trim().regex(/^[a-zA-Z0-9_]{3,32}$/u),
     displayName: publicNameSchema,
     avatarUrl: avatarUrlSchema.nullable(),
     status: userStatusSchema,

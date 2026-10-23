@@ -1,0 +1,15 @@
+diff --git a/node_modules/@ff-labs/fff-node/dist/src/ffi.js b/node_modules/@ff-labs/fff-node/dist/src/ffi.js
+index 82de371..6830ef7 100644
+--- a/node_modules/@ff-labs/fff-node/dist/src/ffi.js
++++ b/node_modules/@ff-labs/fff-node/dist/src/ffi.js
+@@ -96,7 +96,9 @@ function loadLibrary() {
+     if (!binaryPath) {
+         throw new Error("fff native library not found. Run `npx @ff-labs/fff-node download` or build from source with `cargo build --release -p fff-c`");
+     }
+-    open({ library: LIBRARY_KEY, path: binaryPath });
++    // Native FFI loaders cannot open Electron virtual ASAR paths.
++    const nativePath = binaryPath.replace(/\.asar([/\\])/, ".asar.unpacked$1");
++    open({ library: LIBRARY_KEY, path: nativePath });
+     isLoaded = true;
+ }
+ /**

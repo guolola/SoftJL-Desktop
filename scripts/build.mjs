@@ -72,6 +72,7 @@ try {
   for (const name of ['public-sans', 'jetbrains-mono']) {
     await copyFile(resolve(root, 'node_modules/@fontsource-variable', name, 'LICENSE'), resolve(licenses, name + '.txt'));
   }
+  await copyFile(resolve(renderer, 'shared/assistant-ui/LICENSE'), resolve(licenses, 'assistant-ui-elements.txt'));
 } catch (error) {
   console.error(error.message);
   process.exitCode = 1;

@@ -1,0 +1,52 @@
+{
+  "license": "LICENSE",
+  "adaptations": [
+    "workspace import paths",
+    "WebSearch uses the real source count and distinct keys for results from the same domain",
+    "ElicitationForm accepts multiline fields for native Pi editor dialogs"
+  ],
+  "components": [
+    {
+      "registry": "https://r.assistant-ui.com/elements-elicitation-form.json",
+      "documentation": "https://www.assistant-ui.com/elements/elicitation-form",
+      "file": "elements/elicitation-form.tsx",
+      "upstreamContentSha256": "9d98ed74254ada76f5325f6d8cb333cf56bd3521763c3f6217c64e3ad8c2e621",
+      "installedFileSha256": "7a262264ed9414d5e8d2373cf730707f8aadd502d45a9d063d96644cdca798e3"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-task-card.json",
+      "documentation": "https://www.assistant-ui.com/elements/task-card",
+      "file": "elements/task-card.tsx",
+      "upstreamContentSha256": "36397b2b4a16a090e2ea3ebd61b8d4712c33435a57fa9d926897e2e796c7401f",
+      "installedFileSha256": "ee2cbf5df88118e0daa34786e3e7d3ad81e5d97ce7ce8bee814c4099f8573b9b"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-web-search.json",
+      "documentation": "https://www.assistant-ui.com/elements/web-search",
+      "file": "elements/web-search.tsx",
+      "upstreamContentSha256": "579137a4c9ce3bbe8299712033cab89ee0a76ac327e9b41e0e83a5a93218644a",
+      "installedFileSha256": "6d7ceadad435cfb4563d1326d3abb00030a019fdacc5572b70b71bac0c1ff3ed"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-sources.json",
+      "documentation": "https://www.assistant-ui.com/elements/sources",
+      "file": "elements/sources.tsx",
+      "upstreamContentSha256": "c280153e36f1a110f1c3edded3b2f27ad42def391413aa055ede9ac886e354b8",
+      "installedFileSha256": "e5db145019c9b24421e3671ee147ebfd03aec479f5b3059c5189a0b59593b97a"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-href.json",
+      "documentation": "https://www.assistant-ui.com/elements/href",
+      "file": "utils/href.ts",
+      "upstreamContentSha256": "3a8038d038b1918ae3f58a61dcd30933633131dda341eb5bea5b6a650b31a912",
+      "installedFileSha256": "d56aef66ff13421170ec15797d51720e61d2a67eb30b47bcb16747c1f945c9bf"
+    },
+    {
+      "registry": "https://r.assistant-ui.com/elements-collapsible-root.json",
+      "documentation": "https://www.assistant-ui.com/elements/collapsible-root",
+      "file": "elements/collapsible-root.tsx",
+      "upstreamContentSha256": "ebea1fff3af62e619a63680227b3c4b89cec449fac059f5fcd6695cc128f38b8",
+      "installedFileSha256": "0caf7658a33f4a818ee51aef9bf9888df6250f4d21e55c59bac3dc8c91dc4a70"
+    }
+  ]
+}

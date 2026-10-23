@@ -25,18 +25,16 @@ export function useConversationCoding(projectId: string) {
     return () => { controller.abort(); clearTimeout(timer); };
   }, [available, projectId, revision]);
   const act = async (action: () => Promise<unknown>) => {
-    if (lock.current) return;
+    if (lock.current) throw new Error("请等待当前操作完成");
     lock.current = true;
     setPending(true); setError("");
     try { await action(); setRevision(value => value + 1); }
-    catch (error) { setError(error instanceof Error ? error.message : "操作失败，请重试"); }
+    catch (error) { setError(error instanceof Error ? error.message : "操作失败，请重试"); throw error; }
     finally { lock.current = false; setPending(false); }
   };
   return { available, status, error: error || readError, pending, connected: !readError,
-    choose: () => act(() => window.desktop.chooseConversationDirectory(projectId)),
-    clear: () => act(() => conversationCodingApi.clear(projectId)),
-    decide: (id: string, runId: string, allow: boolean) => act(async () => {
-      await conversationCodingApi.decide(projectId, id, runId, allow);
+    decide: (id: string, runId: string, value: string | boolean | null) => act(async () => {
+      await conversationCodingApi.decide(projectId, id, runId, value);
       setStatus(value => ({ ...value, approvals: value.approvals.filter(item => item.id !== id) }));
     }),
   };

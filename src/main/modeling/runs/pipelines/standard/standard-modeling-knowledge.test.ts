@@ -23,10 +23,10 @@ test("native read permits paginated Markdown resources and denies traversal, non
   assert.equal(result.content[0]!.type, "text");
   assert.ok(result.content.some(part => part.type === "text" && part.text.startsWith("second")));
   for (const path of ["../outside/private.md", join(outside, "private.md"), "private.json", root]) {
-    await assert.rejects(read(path), /只允许读取平台提供/);
+    await assert.rejects(read(path), /只允许读取本轮启用/);
   }
   await symlink(outside, join(root, "escape"), process.platform === "win32" ? "junction" : "dir");
-  await assert.rejects(read(join(root, "escape", "private.md")), /只允许读取平台提供/);
+  await assert.rejects(read(join(root, "escape", "private.md")), /只允许读取本轮启用/);
 });
 
 test("generation guidance uses the authored skill and only the task's reference", async () => {

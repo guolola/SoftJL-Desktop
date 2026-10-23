@@ -151,7 +151,7 @@ export const resources = {
         palette: "主题色板",
         defaultPreset: "默认",
       },
-      desktopShell: { userMenu: "用户菜单", localName: "本地工作区", localOnly: "本地使用", workbench: "工作台偏好", workbenchHint: "配置生成提醒和模型状态提示", discard: "有未保存的设置，仍要关闭吗？" },
+      desktopShell: { userMenu: "用户菜单", localName: "Admin", localOnly: "本地使用", workbench: "工作台偏好", workbenchHint: "配置生成提醒和模型状态提示", discard: "有未保存的设置，仍要关闭吗？" },
       auth: {
         login: "登录",
         register: "注册",
@@ -547,7 +547,7 @@ export const resources = {
         palette: "Theme palette",
         defaultPreset: "Default",
       },
-      desktopShell: { userMenu: "User menu", localName: "Local workspace", localOnly: "Local", workbench: "Workspace preferences", workbenchHint: "Configure generation notifications and model status hints", discard: "Discard unsaved settings?" },
+      desktopShell: { userMenu: "User menu", localName: "Admin", localOnly: "Local", workbench: "Workspace preferences", workbenchHint: "Configure generation notifications and model status hints", discard: "Discard unsaved settings?" },
       auth: {
         login: "Log in",
         register: "Register",

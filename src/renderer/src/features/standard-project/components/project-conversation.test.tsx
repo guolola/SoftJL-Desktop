@@ -19,7 +19,7 @@ it("renders actual command failures in the Elements terminal with a real exit co
   const p = defaults();
   p.state.conversation = [{ id: "u", role: "user", text: "运行测试", status: "completed", createdAt: "now" },
     { id: "a", role: "assistant", text: "测试失败，尚未通过。", status: "completed", createdAt: "now", tools: [
-      { id: "cmd", name: "project_command", status: "failed", request: "npm test", output: "FAIL: borrowing limit\n<script>not executable</script>", exitCode: 7, durationMs: 1200, directory: "D:\\library" },
+      { id: "cmd", name: "powershell", status: "failed", request: "npm test", output: "FAIL: borrowing limit\n<script>not executable</script>", exitCode: 7, durationMs: 1200, directory: "D:\\library" },
     ] }];
   const mounted = render(view(p));
   expect(mounted.container.querySelector('[data-slot="terminal-block"]')).toHaveAttribute("data-state", "failed");
@@ -317,9 +317,9 @@ it("shows a saved model question as Agent text and only the selected option in t
   ];
   props.state.conversation = [
     { id: "hello", role: "user", text: "你好", status: "completed", createdAt: "now" },
-    { id: "scope-question", role: "assistant", text: title, tools: [{ id: "scope-tool", name: "ask_questions", status: "completed" }], status: "completed", createdAt: "now" },
+    { id: "scope-question", role: "assistant", text: title, tools: [{ id: "scope-tool", name: "confirm_generation_scope", status: "completed" }], status: "completed", createdAt: "now" },
     { id: "scope-answer", role: "user", text: answer, status: "completed", createdAt: "now" },
-    { id: "topic-question", role: "assistant", text: "请确认项目方向。", tools: [{ id: "topic-tool", name: "ask_questions", status: "completed" }], status: "completed", createdAt: "now" },
+    { id: "topic-question", role: "assistant", text: "请确认项目方向。", tools: [{ id: "topic-tool", name: "confirm_generation_scope", status: "completed" }], status: "completed", createdAt: "now" },
   ];
   render(view(props));
   expect(screen.getByText(title).closest('[data-role="assistant"]')).not.toBeNull();
@@ -415,7 +415,7 @@ it.each(["改为生成：概念 E-R 图", "不生成替代图"])("discloses the 
       { id: "yes", label: "改为生成：概念 E-R 图", kinds: ["er"], recommended: true }, { id: "no", label: "不生成替代图", kinds: [], recommended: false },
     ] }] }];
   props.state.conversation = [{ id: "notice", role: "assistant", text: "当前平台不支持生成状态图，不会擅自替换成其他图。", status: "completed", createdAt: "now" },
-    { id: "ask", role: "assistant", text: "请确认是否选择其他模型。", status: "completed", createdAt: "now", tools: [{ id: "tool", name: "ask_questions", status: "completed" }] }];
+    { id: "ask", role: "assistant", text: "请确认是否选择其他模型。", status: "completed", createdAt: "now", tools: [{ id: "tool", name: "confirm_generation_scope", status: "completed" }] }];
   const mounted = render(view(props)); const user = userEvent.setup();
   expect(screen.getByText(title)).toBeInTheDocument();
   expect(screen.getByText(/不会擅自替换/)).toBeInTheDocument();
@@ -566,7 +566,7 @@ it("keeps a completed question tool waiting until its form is answered", async (
   const props = defaults();
   props.state.rounds = [{ questions: [{ id: "role", title: "谁使用系统？", options: ["学生"], recommendation: "学生", multiple: false }], answers: [] }];
   props.state.conversation = [{ id: "a", role: "assistant", text: "请补充。", status: "completed", createdAt: "now",
-    tools: [{ id: "ask", name: "ask_questions", status: "completed" }] }];
+    tools: [{ id: "ask", name: "confirm_generation_scope", status: "completed" }] }];
   const mounted = render(view(props));
   expect(screen.getByRole("button", { name: /补充需求.*等待回答/ }).closest('[data-slot="tool-call"]')).toHaveAttribute("data-outcome", "waiting");
   expect(screen.getByRole("button", { name: "学生" })).toBeVisible();
@@ -685,7 +685,7 @@ it.each(["completed", "stopped", "failed", "waiting"] as const)("turns off the r
   props.state.run = { id: "run", operation: "chat", status: status === "waiting" ? "running" : status, startedAt: "now" };
   if (status === "waiting") props.state.rounds = [{ questions: [{ id: "role", title: "谁使用？", options: ["学生"], recommendation: "学生", multiple: false }], answers: [] }];
   props.state.conversation = [{ id: "a1", role: "assistant", text: "", reasoning: "检查项目。", status: status === "failed" ? "failed" : "completed", createdAt: "now",
-    tools: [{ id: "tool", name: status === "waiting" ? "ask_questions" : "read_diagram", status: status === "failed" ? "failed" : "completed" }] }];
+    tools: [{ id: "tool", name: status === "waiting" ? "confirm_generation_scope" : "read_diagram", status: status === "failed" ? "failed" : "completed" }] }];
   const mounted = render(view(props));
   const trigger = mounted.container.querySelector('[data-slot="reasoning-root"] > [data-slot="collapsible-trigger"]')!;
   expect(trigger).toHaveAttribute("aria-expanded", "false");
@@ -783,7 +783,7 @@ it("keeps failures and question controls visible when the merged reasoning is ma
   props.state.rounds = [{ questions: [{ id: "role", title: "需要谁确认？", options: ["管理员"], recommendation: "管理员", multiple: false }], answers: [] }];
   props.state.conversation = [
     { id: "a1", role: "assistant", text: "", reasoning: "检查失败原因。", status: "completed", createdAt: "now", tools: [{ id: "generate", name: "generate_diagrams", status: "failed" }] },
-    { id: "a2", role: "assistant", text: "", status: "completed", createdAt: "now", tools: [{ id: "ask", name: "ask_questions", status: "completed" }] },
+    { id: "a2", role: "assistant", text: "", status: "completed", createdAt: "now", tools: [{ id: "ask", name: "confirm_generation_scope", status: "completed" }] },
   ];
   render(view(props));
   const trigger = screen.getByRole("button", { name: "等待回答" });
@@ -991,7 +991,7 @@ it("asks one step at a time, keeps Back answers and submits all answers once at 
     { id: "role", title: "谁使用？", options: ["学生", "教师"], recommendation: "学生", multiple: false },
     { id: "features", title: "需要哪些功能？", options: ["借阅", "预约"], recommendation: "借阅", multiple: true },
   ], answers: [] }];
-  props.state.conversation = [{ id: "ask", role: "assistant", text: "", tools: [{ id: "q", name: "ask_questions", status: "completed" }], status: "completed", createdAt: "now" }];
+  props.state.conversation = [{ id: "ask", role: "assistant", text: "", tools: [{ id: "q", name: "confirm_generation_scope", status: "completed" }], status: "completed", createdAt: "now" }];
   render(view(props)); const user = userEvent.setup();
   expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
   expect(screen.queryByText("需要哪些功能？")).not.toBeInTheDocument();
@@ -1038,7 +1038,7 @@ it("restores persisted QuestionFlow receipts on their original tool-only message
   const answers = [{ questionId: "role", answer: "学生" }];
   props.state.rounds = [{ questions: [{ id: "role", title: "谁使用系统？", options: ["学生", "教师"], recommendation: "学生", multiple: false }], answers }];
   props.state.conversation = [
-    { id: "ask", role: "assistant", text: "", tools: [{ id: "q", name: "ask_questions", status: "completed" }], status: "completed", createdAt: "now" },
+    { id: "ask", role: "assistant", text: "", tools: [{ id: "q", name: "confirm_generation_scope", status: "completed" }], status: "completed", createdAt: "now" },
     { id: "answer", role: "user", text: "学生", answers, status: "completed", createdAt: "now" },
     { id: "next", role: "assistant", text: "已保存。", status: "completed", createdAt: "now" },
   ];

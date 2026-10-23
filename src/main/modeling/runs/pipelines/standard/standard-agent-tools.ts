@@ -26,7 +26,7 @@ export function createStandardAgentTools(deps: StandardPipelineDependencies, cur
       async execute() { const state = current(); return result({ tests: state.tests ?? [], documents: Object.fromEntries(Object.entries(state.documents ?? {}).map(([kind, document]) => [kind, document ? { title: document.title, markdown: document.markdown } : null])) }); } }),
     defineTool({ name: "read_diagram", label: "读取图表", description: "按 ID 读取相关图的结构数据，不返回 SVG。", parameters: Type.Object({ ids: Type.Array(Type.String(), { minItems: 1, maxItems: 8 }) }),
       async execute(_, { ids }) { return result(ids.map(id => { const diagram = current().diagrams[id]; if (!diagram) throw new Error(`图不存在：${id}`); return { id, kind: diagram.kind, title: diagram.title, model: diagram.model, status: diagram.status }; })); } }),
-    defineTool({ name: "report_unsupported_diagram", label: "说明不支持的模型", description: "用户请求八类支持模型之外的图时先调用，models只填写不支持的模型名称。平台会明确告知用户不支持并阻止擅自替换。若提供替代方案，随后必须调用ask_questions让用户确认，不能直接生成或修改图。", parameters: Type.Object({ models: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 8 }) }),
+    defineTool({ name: "report_unsupported_diagram", label: "说明不支持的模型", description: "用户请求八类支持模型之外的图时先调用，models只填写不支持的模型名称。平台会明确告知用户不支持并阻止擅自替换。若提供替代方案，随后必须调用confirm_generation_scope让用户确认，不能直接生成或修改图。", parameters: Type.Object({ models: Type.Array(Type.String({ minLength: 1, maxLength: 100 }), { minItems: 1, maxItems: 8 }) }),
       async execute(_, input) {
         const models = z.array(z.string().trim().min(1).max(100)).min(1).max(8).parse(input.models);
         if (models.some(name => resolveStandardGenerationSelection(`生成${name}`, false)?.length)) throw new Error("该名称包含受支持的模型，请读取模型目录，不要报告为不支持");
@@ -35,18 +35,18 @@ export function createStandardAgentTools(deps: StandardPipelineDependencies, cur
         await deps.save(state => { recordUnsupportedDiagramRequest(state, models, messageId, language); });
         return result({ supported: false, message: unsupportedDiagramNotice(models, language), alternativeRequiresAsk: true });
       } }),
-    defineTool({ name: "ask_questions", label: "询问用户", description: "展示交互式询问。模型选择使用purpose=generation_scope，模型题必须提供scopeChoices，每项包含稳定id、label、kinds和recommended；拒绝生成用kinds=[]。不支持模型的替代方案只能使用一题，明确受支持的类型并包含不生成选项，调用后等待用户通过组件确认。options由scopeChoices确定。业务澄清使用business。最多3题，每题最多8项。", parameters: Type.Unsafe<{ questions: z.infer<typeof standardQuestionSchema>[]; purpose?: "generation_scope" | "business" }>(zodToJsonSchema(z.object({ purpose: z.enum(["generation_scope", "business"]).optional(), questions: z.array(standardQuestionSchema).min(1).max(3) }), { $refStrategy: "none" })),
+    defineTool({ name: "confirm_generation_scope", label: "确认模型范围", description: "展示交互式询问。模型选择使用purpose=generation_scope，模型题必须提供scopeChoices，每项包含稳定id、label、kinds和recommended；拒绝生成用kinds=[]。不支持模型的替代方案只能使用一题，明确受支持的类型并包含不生成选项，调用后等待用户通过组件确认。options由scopeChoices确定。业务澄清使用 ask_user_question。最多3题，每题最多8项。", parameters: Type.Unsafe<{ questions: z.infer<typeof standardQuestionSchema>[]; purpose: "generation_scope" }>(zodToJsonSchema(z.object({ purpose: z.literal("generation_scope"), questions: z.array(standardQuestionSchema).min(1).max(3) }), { $refStrategy: "none" })),
       async execute(_, input) {
+        if (input.purpose !== "generation_scope") throw new Error("通用澄清请使用 ask_user_question；此工具仅用于确认模型范围");
         const unsupported = current().unsupportedDiagramRequest;
         if (useRecommendations && !unsupported) throw new Error("用户已选择推荐方案，不再追问，请采用推荐并记录假设");
         const questions = z.array(standardQuestionSchema).min(1).max(3).parse(input.questions);
         if (unsupported) {
-          if (input.purpose !== "generation_scope" || questions.length !== 1) throw new Error("替代模型必须通过单独的 generation_scope 询问组件确认");
+          if (questions.length !== 1) throw new Error("替代模型必须通过单独的 generation_scope 询问组件确认");
           prepareStandardAlternativeQuestion(questions[0]!, unsupported.models, language);
         }
-        if (input.purpose === "generation_scope" && !questions.some(question => question.scopeChoices)) throw new Error("模型范围问题必须提供带类型标识的 scopeChoices");
+        if (!questions.some(question => question.scopeChoices)) throw new Error("模型范围问题必须提供带类型标识的 scopeChoices");
         for (const question of questions) if (question.scopeChoices) {
-          if (input.purpose !== "generation_scope") throw new Error("模型选项必须使用 generation_scope 问题");
           if (new Set(question.scopeChoices.map(choice => choice.id)).size !== question.scopeChoices.length) throw new Error("模型选项标识重复");
           if (new Set(question.scopeChoices.map(choice => choice.label)).size !== question.scopeChoices.length) throw new Error("模型选项文案重复");
           if (!question.multiple && question.scopeChoices.filter(choice => choice.recommended).length > 1) throw new Error("单选模型题只能推荐一个选项");
@@ -55,7 +55,7 @@ export function createStandardAgentTools(deps: StandardPipelineDependencies, cur
           question.options = question.scopeChoices.map(choice => choice.label);
         }
         await deps.save(state => {
-          state.rounds.push({ questions, answers: [], purpose: input.purpose ?? "business" });
+          state.rounds.push({ questions, answers: [], purpose: input.purpose });
           if (state.unsupportedDiagramRequest) state.unsupportedDiagramRequest.questionId = questions[0]!.id;
         }); awaitingAnswer = true;
         return result({ status: "waiting_for_user", questions }, true);

@@ -14,8 +14,8 @@ const convert = (message: StandardConversationMessage): ThreadMessageLike => ({ 
     // Missing dates stay deterministic in the runtime and are omitted from the date UI.
     createdAt: conversationDate(message.createdAt) ?? new Date(0),
     content: [...(message.reasoning ? [{ type: "reasoning" as const, text: message.reasoning }] : []),
-      ...(message.tools ?? []).map(tool => ({ type: "tool-call" as const, toolCallId: tool.id, toolName: tool.name, args: tool.request ? { request: tool.request, ...(tool.status === "running" && tool.output ? { liveOutput: tool.output } : {}) } : {},
-        ...(tool.status !== "running" ? { result: tool.output !== undefined ? { output: tool.output, directory: tool.directory, exitCode: tool.exitCode, durationMs: tool.durationMs, truncated: tool.truncated } : tool.status, isError: tool.status === "failed" } : {}) })), { type: "text", text: message.text }],
+      ...(message.tools ?? []).map(tool => ({ type: "tool-call" as const, toolCallId: tool.id, toolName: tool.name, args: JSON.parse(JSON.stringify({ ...tool.arguments, data: tool.data, ...(tool.request ? { request: tool.request } : {}), ...(tool.status === "running" && tool.output ? { liveOutput: tool.output } : {}) })),
+        ...(tool.status !== "running" ? { result: tool.output !== undefined ? { data: tool.data, output: tool.output, directory: tool.directory, exitCode: tool.exitCode, durationMs: tool.durationMs, truncated: tool.truncated } : tool.status, isError: tool.status === "failed" } : {}) })), { type: "text", text: message.text }],
     attachments: message.attachments?.map(toAssistantAttachment), metadata: { custom: { quote: message.quote },
       ...(message.timing ? { timing: message.timing } : {}),
       ...(message.feedback ? { submittedFeedback: { type: message.feedback } } : {}) },

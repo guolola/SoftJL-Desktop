@@ -1,67 +1,89 @@
-// Verifies actual Elements reviews, prerequisite advice and action guards within the modeling conversation.
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+// Verifies official Elements controls round-trip the plugin's choices and preserve action guards.
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { i18n } from "../../../shared/i18n/index.js";
 import { createStandardProjectState } from "../../../../../shared/contracts/index.js";
-import { standardModelFixture } from "../../../../../shared/contracts/testing/index.js";
 import { ConversationCoding } from "./conversation-coding.js";
 
 afterEach(cleanup);
 beforeEach(async () => { await i18n.changeLanguage("zh-CN"); });
-function props() {
-  return { state: createStandardProjectState(), canEdit: true, disabled: false, canCancel: true, onCancel: vi.fn(async () => {}),
-    coding: { available: true, connected: true, status: { directory: "D:\\projects\\library", approvals: [], busy: false }, error: "", pending: false,
-      choose: vi.fn(async () => {}), clear: vi.fn(async () => {}), decide: vi.fn(async () => {}) } } satisfies Parameters<typeof ConversationCoding>[0];
+function props(): Parameters<typeof ConversationCoding>[0] {
+  return { state: { ...createStandardProjectState(), run: { id: "run", operation: "chat", status: "running", startedAt: "now" } }, canEdit: true, canCancel: true, onCancel: vi.fn(async () => {}),
+    coding: { available: true, connected: true, status: { directory: "D:/project", approvals: [], busy: false }, error: "", pending: false,
+      decide: vi.fn(async () => {}) } };
 }
-const approval = { id: "approval", runId: "run", toolCallId: "call", tool: "project_command", title: "运行命令或测试", directory: "D:\\projects\\library", detail: "npm test", warning: "当前缺少模型，建议先补齐" };
-
-it("advises completing missing artifacts and keeps directory selection in the current conversation", () => {
-  const p = props(); render(<ConversationCoding {...p} />);
-  expect(screen.getByRole("note")).toHaveTextContent("缺少模型、测试用例、需求规格说明书、软件设计说明书");
-  fireEvent.click(screen.getByRole("button", { name: "更换代码目录" })); expect(p.coding.choose).toHaveBeenCalledOnce();
-  fireEvent.click(screen.getByRole("button", { name: "取消目录授权" })); expect(p.coding.clear).toHaveBeenCalledOnce();
-});
-it("lets the user approve, refuse or stop while the ordinary composer is busy and blocks directory changes", () => {
-  const p: Parameters<typeof ConversationCoding>[0] = props();
-  p.disabled = true; p.state.run = { id: "run", operation: "chat", status: "running", startedAt: "now" };
-  p.coding.status = { directory: approval.directory, busy: true, approvals: [approval] };
+const prompt = { id: "approval", runId: "run", toolCallId: "call", tool: "pi_dialog", title: "Allow write?", directory: "D:/project", detail: "" };
+it("uses OptionList and returns the original upstream choice, including session grants", async () => {
+  const p = props();
+  p.coding.status.approvals = [{ ...prompt, dialog: "select", options: ["Approve once", "Approve for session", "Deny with reason"] }];
   const { container } = render(<ConversationCoding {...p} />);
-  expect(container.querySelector('[data-slot="approval-card"]')).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "更换代码目录" })).toBeDisabled();
-  expect(screen.getByText("npm test")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "仍然继续并允许本次操作" })); expect(p.coding.decide).toHaveBeenCalledWith("approval", "run", true);
-  fireEvent.click(screen.getByRole("button", { name: "拒绝本次操作" })); expect(p.coding.decide).toHaveBeenCalledWith("approval", "run", false);
+  expect(container.querySelector('[data-slot="option-list"]')).toBeInTheDocument();
+  expect(screen.queryByText("D:/project")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "更换代码目录" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Approve for session" }));
+  await waitFor(() => expect(p.coding.decide).toHaveBeenCalledWith("approval", "run", "Approve for session"));
   fireEvent.click(screen.getByRole("button", { name: "停止本轮任务" })); expect(p.onCancel).toHaveBeenCalledOnce();
-  expect(screen.queryByText("Always allow")).not.toBeInTheDocument();
 });
-it("renders real file differences before approval and does not show stale run approvals", () => {
-  const p: Parameters<typeof ConversationCoding>[0] = props();
-  p.state.run = { id: "run", operation: "chat", status: "running", startedAt: "now" };
-  p.coding.status.approvals = [{ ...approval, tool: "project_edit", title: "修改项目文件", path: "index.ts", changes: [{ oldText: "const limit = 4;", newText: "const limit = 5;" }] }];
+it("keeps an unsuccessful choice open instead of displaying a false receipt", async () => {
+  const p = props(); p.coding.decide = vi.fn().mockRejectedValue(new Error("回答未送达"));
+  p.coding.status.approvals = [{ ...prompt, dialog: "select", options: ["Approve once"] }];
+  render(<ConversationCoding {...p} />);
+  fireEvent.click(screen.getByRole("button", { name: "Approve once" }));
+  await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("回答未送达"));
+  expect(screen.getByRole("button", { name: "Approve once" })).toBeInTheDocument();
+});
+it("uses ElicitationForm for free text and returns cancellation without authorizing", async () => {
+  const p = props(); p.coding.status.approvals = [{ ...prompt, dialog: "input", placeholder: "详细说明" }];
   const { container, rerender } = render(<ConversationCoding {...p} />);
-  expect(container.querySelector('[data-slot="code-diff"]')).toHaveTextContent("const limit = 4;");
-  expect(screen.getByText("const limit = 5;")).toBeInTheDocument();
-  expect(screen.getByText("const limit = 5;").parentElement).toHaveStyle({ animation: "none" });
-  rerender(<ConversationCoding {...p} state={{ ...p.state, run: { ...p.state.run!, id: "new-run" } }} />);
-  expect(screen.queryByLabelText("待审批操作")).not.toBeInTheDocument();
+  expect(container.querySelector('[data-slot="elicitation-form"]')).toBeInTheDocument();
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "只修改测试" } });
+  fireEvent.click(screen.getByRole("button", { name: /Send|Continue|Submit/ }));
+  expect(p.coding.decide).toHaveBeenCalledWith("approval", "run", "只修改测试");
+  p.coding.status.approvals = [{ ...prompt, id: "confirm", dialog: "confirm", detail: "执行测试" }];
+  rerender(<ConversationCoding {...p} />);
+  expect(container.querySelector('[data-slot="approval-card"]')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "取消" }));
+  expect(p.coding.decide).toHaveBeenCalledWith("confirm", "run", false);
 });
-it("requires current edit access and an available connection for approval actions", () => {
-  const p: Parameters<typeof ConversationCoding>[0] = props(); p.canEdit = false;
-  p.state.run = { id: "run", operation: "chat", status: "running", startedAt: "now" }; p.coding.status.approvals = [approval];
+it("previews native edit fragments and preserves editor prefill", () => {
+  const p = props();
+  p.coding.status.approvals = [{ ...prompt, tool: "edit", dialog: "select", options: ["Approve once"],
+    arguments: { path: "limit.ts", edits: [{ oldText: "limit = 4", newText: "limit = 5" }] } }];
+  const { container, rerender } = render(<ConversationCoding {...p} />);
+  expect(container.querySelector('[data-slot="code-diff"]')).toBeInTheDocument();
+  expect(screen.getByText("limit = 4")).toBeInTheDocument();
+  expect(screen.getByText("limit = 5")).toBeInTheDocument();
+  p.coding.status.approvals = [{ ...prompt, id: "editor", dialog: "input", initialValue: "existing\nanswer", multiline: true }];
+  rerender(<ConversationCoding {...p} />);
+  expect(screen.getByRole("textbox")).toHaveValue("existing\nanswer");
+  fireEvent.click(screen.getByRole("button", { name: /Send/ }));
+  expect(p.coding.decide).toHaveBeenCalledWith("editor", "run", "existing\nanswer");
+});
+it("ignores stale prompts and guards replies when edit access or connection is unavailable", () => {
+  const p = props(); p.canEdit = false;
+  p.coding.status.approvals = [{ ...prompt, dialog: "select", options: ["Approve once"] }];
   const { rerender } = render(<ConversationCoding {...p} />);
-  fireEvent.click(screen.getByRole("button", { name: "拒绝本次操作" })); expect(p.coding.decide).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Approve once" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Approve once" })); expect(p.coding.decide).not.toHaveBeenCalled();
   p.canEdit = true; p.coding.connected = false; p.coding.error = "服务连接已断开"; rerender(<ConversationCoding {...p} />);
   expect(screen.getByRole("alert")).toHaveTextContent("服务连接已断开");
-  expect(screen.getByRole("button", { name: "仍然继续并允许本次操作" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "仍然继续并允许本次操作" })); expect(p.coding.decide).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Approve once" })).toBeDisabled();
+  p.state.run!.id = "next"; rerender(<ConversationCoding {...p} />);
+  expect(screen.queryByRole("button", { name: "Approve once" })).not.toBeInTheDocument();
 });
-it("removes the prerequisite advice once saved models, test cases and both documents exist", () => {
-  const p = props(); p.state.diagrams.class = { id: "class", kind: "class", title: "类图", status: "completed", model: standardModelFixture("class") };
-  p.state.tests = [{ id: "t", businessId: "b", title: "测试", preconditions: [], steps: ["提交"], expected: "成功" }];
-  p.state.documents = { requirementsSpec: { title: "需求", markdown: "需求正文", generatedAt: "now" }, softwareDesignSpec: { title: "设计", markdown: "设计正文", generatedAt: "now" } };
-  render(<ConversationCoding {...p} />); expect(screen.queryByRole("note")).not.toBeInTheDocument();
+it("leaves chat free of directory management both with and without a code directory", () => {
+  const p = props();
+  const { container, rerender } = render(<ConversationCoding {...p} />);
+  expect(container).toBeEmptyDOMElement();
+  p.coding.status.directory = null;
+  rerender(<ConversationCoding {...p} />);
+  expect(container).toBeEmptyDOMElement();
+  p.coding.status.approvals = [{ ...prompt, dialog: "input", title: "补充要求" }];
+  rerender(<ConversationCoding {...p} />);
+  expect(screen.getByRole("textbox")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /代码目录/ })).not.toBeInTheDocument();
 });
-it("shows no local coding controls without the native desktop capability", () => {
-  const p = props(); render(<ConversationCoding {...p} coding={{ ...p.coding, available: false }} />);
+it("hides desktop controls when the native capability is absent", () => {
+  const p = props(); p.coding.available = false; render(<ConversationCoding {...p} />);
   expect(screen.queryByRole("region", { name: "会话编码" })).not.toBeInTheDocument();
 });

@@ -108,6 +108,7 @@ export const standardConversationMessageSchema = z.object({
   feedback: z.enum(["positive", "negative"]).optional(),
   tools: z.array(z.object({ id: z.string(), name: z.string(), status: z.enum(["running", "completed", "failed"]),
     request: z.string().max(40000).optional(), output: z.string().max(20000).optional(), directory: z.string().optional(),
+    arguments: z.record(z.unknown()).optional(), data: z.record(z.unknown()).optional(),
     exitCode: z.number().int().optional(), durationMs: z.number().nonnegative().optional(), truncated: z.boolean().optional(),
   })).optional(),
 }).strict();

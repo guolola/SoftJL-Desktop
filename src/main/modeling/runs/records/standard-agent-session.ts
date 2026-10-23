@@ -2,8 +2,8 @@
 import { SessionManager, type SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { StandardProjectState } from "../../../../shared/contracts/index.js";
 
-export function restoreStandardSession(projectId: string, saved?: StandardProjectState["piSession"]) {
-  const manager = SessionManager.inMemory(`/uml-projects/${projectId}`);
+export function restoreStandardSession(projectId: string, saved?: StandardProjectState["piSession"], cwd = `/uml-projects/${projectId}`) {
+  const manager = SessionManager.inMemory(cwd);
   const ids = new Map<string, string>();
   for (const entry of (saved?.entries ?? []) as SessionEntry[]) {
     if (entry.parentId && ids.has(entry.parentId)) manager.branch(ids.get(entry.parentId)!);

@@ -8,7 +8,7 @@ import { ThemeProvider } from '../../../shared/ui/theme-provider';
 import { SidebarProvider } from '../../../shared/ui/sidebar';
 import { invalidateProviderConfigCache } from '../services/provider-config-cache';
 import { AccountDialog } from './account-dialog';
-const user={id:'local',username:'local_workspace',displayName:'本地工作区',status:'active',mfaEnabled:false};
+const user={id:'local',username:'Admin',displayName:'Admin',status:'active',mfaEnabled:false};
 function openSettings(request=0){return render(<AppI18nProvider><ThemeProvider><SidebarProvider><AccountDialog initialUser={user} onNavigate={vi.fn()} globalSettingsRequestId={request}/></SidebarProvider></ThemeProvider></AppI18nProvider>);}
 beforeEach(()=>{localStorage.clear();invalidateProviderConfigCache();vi.stubGlobal('fetch',vi.fn(async(url)=>Response.json(String(url).includes('/integrations')?{servers:[],skills:[]}:{providerConfigs:[]})));});
 it('shows only profile, models, MCP and Skills and opens profile by default', async () => {

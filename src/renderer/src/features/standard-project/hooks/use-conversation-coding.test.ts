@@ -1,11 +1,11 @@
-// Checks native selection cancellation, single-flight decisions and stale project polling responses.
+// Checks desktop polling, single-flight decisions and stale project responses.
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { DesktopBridge } from "../../../../../shared/bridge.js";
 import { conversationCodingApi } from "../services/conversation-coding-api.js";
 import { useConversationCoding } from "./use-conversation-coding.js";
 
-vi.mock("../services/conversation-coding-api.js", () => ({ conversationCodingApi: { read: vi.fn(), clear: vi.fn(), decide: vi.fn() } }));
+vi.mock("../services/conversation-coding-api.js", () => ({ conversationCodingApi: { read: vi.fn(), decide: vi.fn() } }));
 const original = window.desktop;
 const initial = { directory: "D:\\library", approvals: [], busy: false };
 beforeEach(() => {
@@ -15,11 +15,11 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); Object.defineProperty(window, "desktop", { configurable: true, value: original }); });
 
-it("does not poll hosted pages and preserves the directory when the native chooser is cancelled", async () => {
+it("reads desktop status without exposing directory mutations and does not poll hosted pages", async () => {
   const hook = renderHook(() => useConversationCoding("p"));
   await waitFor(() => expect(hook.result.current.status.directory).toBe(initial.directory));
-  await act(() => hook.result.current.choose());
-  expect(hook.result.current.status.directory).toBe(initial.directory); expect(conversationCodingApi.clear).not.toHaveBeenCalled();
+  expect(hook.result.current).not.toHaveProperty("choose");
+  expect(hook.result.current).not.toHaveProperty("clear");
   hook.unmount(); vi.mocked(conversationCodingApi.read).mockClear();
   Object.defineProperty(window, "desktop", { configurable: true, value: undefined });
   const hosted = renderHook(() => useConversationCoding("p"));
@@ -30,11 +30,13 @@ it("submits one approval at a time and retains failures for the user to review",
   vi.mocked(conversationCodingApi.decide).mockImplementation(() => new Promise<void>(resolve => { resolveDecision = resolve; }));
   const hook = renderHook(() => useConversationCoding("p")); await waitFor(() => expect(hook.result.current.status.directory).toBe(initial.directory));
   let first!: Promise<void>;
-  act(() => { first = hook.result.current.decide("review", "run", true); void hook.result.current.decide("review", "run", true); });
+  let duplicate!: Promise<void>;
+  act(() => { first = hook.result.current.decide("review", "run", true); duplicate = hook.result.current.decide("review", "run", true); });
+  await expect(duplicate).rejects.toThrow("请等待当前操作完成");
   expect(conversationCodingApi.decide).toHaveBeenCalledTimes(1);
   await act(async () => { resolveDecision(); await first; });
   vi.mocked(conversationCodingApi.decide).mockRejectedValueOnce(new Error("此审批已失效"));
-  await act(() => hook.result.current.decide("expired", "old", true));
+  await act(async () => { await expect(hook.result.current.decide("expired", "old", true)).rejects.toThrow("此审批已失效"); });
   expect(hook.result.current.error).toBe("此审批已失效"); expect(hook.result.current.pending).toBe(false);
 });
 it("ignores late responses belonging to a previous project", async () => {
