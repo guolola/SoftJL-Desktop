@@ -156,7 +156,7 @@ describe("api-client", () => {
     const result = await downloadBlob("/api/document-runs/run/download");
     expect(result.fileName).toBe("说明书.docx");
     // jsdom's browser Blob implements FileReader rather than Blob.text().
-    const text = await new Promise<string>((resolve, reject) => {
+    const text = typeof result.blob.text === "function" ? await result.blob.text() : await new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
       reader.onerror = () => reject(reader.error);

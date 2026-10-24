@@ -1,10 +1,10 @@
 // Verifies the desktop dialog bridge, not a second implementation of plugin permission policy.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { ConversationCodingService } from "./coding-service.js";
 
 async function setup(t: test.TestContext) {
@@ -48,7 +48,7 @@ test("questions work without a code directory and native tools require a selecte
   const s = await setup(t);
   const registered: string[] = [];
   await s.run.extension({ on() {}, registerTool: (tool: { name: string }) => registered.push(tool.name) } as never);
-  assert.deepEqual(registered, []);
+  assert.deepEqual(registered, ["select_code_directory"]);
   const input = s.ui.input("Project name"); const prompt = (await s.service.status("p")).approvals[0]!;
   s.service.answer("p", "run", prompt.id, "Library"); assert.equal(await input, "Library");
   await assert.rejects(s.service.select("p", s.code), /先停止/);
@@ -57,4 +57,48 @@ test("questions work without a code directory and native tools require a selecte
   await run.extension({ on() {}, registerTool: (tool: { name: string }) => registered.push(tool.name) } as never);
   assert.ok(registered.includes("write") && registered.includes("powershell")); assert.ok(!registered.some(name => name.startsWith("project_")));
   run.close(); await assert.rejects(s.service.select("p", s.data), /应用数据/);
+});
+
+async function requestFolder(run: Awaited<ReturnType<ConversationCodingService["open"]>>) {
+  let chooser!: ToolDefinition;
+  await run.extension({ on() {}, registerTool: (tool: ToolDefinition) => { if (tool.name === "select_code_directory") chooser = tool; } } as never);
+  return { select: () => chooser.execute("choose", {}, new AbortController().signal, undefined, {} as never) };
+}
+
+test("a native folder choice releases the current request and enables tools on reopening", async t => {
+  const s = await setup(t);
+  const chooser = await requestFolder(s.run);
+  const pending = chooser.select();
+  const prompt = (await s.service.status("p")).approvals[0]!;
+  assert.equal(prompt.dialog, "directory"); assert.equal(s.run.workspaceSelected(), false);
+  assert.throws(() => s.service.answer("p", "run", prompt.id, s.code), /本机文件夹选择器/);
+  await assert.rejects(s.service.select("p", s.code), /先停止/);
+  const request = { runId: "run", approvalId: prompt.id };
+  await assert.rejects(s.service.select("p", s.data, request), /应用数据/);
+  await assert.rejects(s.service.select("other", s.code, request), /失效/);
+  await assert.rejects(s.service.select("p", s.code, { ...request, runId: "old" }), /失效/);
+  await s.service.select("p", s.code, request);
+  await pending;
+  assert.equal(s.run.workspaceSelected(), true);
+  await chooser.select();
+  assert.deepEqual((await s.service.status("p")).approvals, []);
+  await assert.rejects(s.service.select("p", s.code, request), /失效/);
+  s.run.close();
+  const next = await s.service.open("p", "run", s.controller.signal); t.after(next.close);
+  assert.equal(next.enabled, true); assert.equal(next.cwd, await realpath(s.code));
+  assert.deepEqual((await s.service.status("p")).approvals, []);
+});
+
+test("stopping while waiting for a folder invalidates the chooser without enabling coding", async t => {
+  const s = await setup(t);
+  const chooser = await requestFolder(s.run);
+  const pending = chooser.select();
+  const prompt = (await s.service.status("p")).approvals[0]!;
+  s.controller.abort();
+  await assert.rejects(pending, /abort/i);
+  await assert.rejects(s.service.select("p", s.code, { runId: "run", approvalId: prompt.id }), /失效/);
+  assert.equal(s.run.workspaceSelected(), false);
+  s.run.close();
+  const status = await s.service.status("p");
+  assert.equal(status.directory, null); assert.equal(status.busy, false); assert.deepEqual(status.approvals, []);
 });

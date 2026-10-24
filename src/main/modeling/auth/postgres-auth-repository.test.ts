@@ -59,13 +59,6 @@ const projectRow = {
   updated_at: "2026-05-22T00:00:00.000Z",
 };
 
-test("postgres project reads require an explicit current project mode", async () => {
-  for (const project_mode of [undefined, "obsolete-mode"]) {
-    const client = new CapturingClient(); client.nextRows = [{ ...projectRow, project_mode }];
-    await assert.rejects(createPostgresAuthRepository(client).getProject(projectRow.id));
-  }
-});
-
 const memberRow = {
   id: "member-1",
   project_id: "project-1",

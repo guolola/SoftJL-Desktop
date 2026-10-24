@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { UmlDiagramKind } from "../../../../../shared/contracts/index.js";
-import { useWorkspaceRepository } from "../../../services/workspace-repository/index.js";
+import { exportDiagramRequest } from "../../../services/workspace-repository/run-actions-api.js";
 import { downloadBlobFile, downloadTextFile } from "../../../shared/lib/download.js";
 import { Button } from "../../../shared/ui/button.js";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../../../shared/ui/dropdown-menu.js";
@@ -11,11 +11,10 @@ import { floatingAlert } from "../../../shared/ui/floating-alert.js";
 
 type Format = "svg" | "png" | "pdf" | "puml";
 
-export function DiagramDownloadMenu({ diagramKind, diagramId, fileStem, svg, source }: {
-  diagramKind: UmlDiagramKind; diagramId?: string; fileStem: string; svg: string; source: string;
+export function DiagramDownloadMenu({ projectId, diagramKind, diagramId, fileStem, svg, source }: {
+  projectId: string; diagramKind: UmlDiagramKind; diagramId?: string; fileStem: string; svg: string; source: string;
 }) {
   const { t } = useTranslation();
-  const repository = useWorkspaceRepository();
   const active = useRef<AbortController | null>(null);
   const [busy, setBusy] = useState(false);
   const identity = JSON.stringify([diagramId, diagramKind, fileStem, svg, source]);
@@ -25,7 +24,7 @@ export function DiagramDownloadMenu({ diagramKind, diagramId, fileStem, svg, sou
   const reason = (format: Format) => {
     if (format === "svg") return !svg.trim() ? t("diagrams.detail.downloadNoSvg") : "";
     if (sourceMissing) return t("diagrams.detail.downloadNoSource");
-    if (format !== "puml" && !repository.exportDiagram) return t("diagrams.detail.downloadUnsupported");
+    if (format !== "puml" && !projectId) return t("diagrams.detail.downloadUnsupported");
     return "";
   };
 
@@ -44,7 +43,7 @@ export function DiagramDownloadMenu({ diagramKind, diagramId, fileStem, svg, sou
       window.removeEventListener("uml-route-change", cancel);
       window.removeEventListener("popstate", cancel);
     };
-  }, [identity, repository]);
+  }, [identity, projectId]);
 
   async function download(format: Format) {
     if (active.current || reason(format)) return;
@@ -59,7 +58,7 @@ export function DiagramDownloadMenu({ diagramKind, diagramId, fileStem, svg, sou
     setBusy(true);
     try {
       // Capture the saved source at click time; never download a response for a different diagram.
-      const blob = await repository.exportDiagram!({ diagramKind, plantUmlSource: source, format }, controller.signal);
+      const blob = await exportDiagramRequest({ diagramKind, plantUmlSource: source, format }, projectId, controller.signal);
       if (controller.signal.aborted || latest.current !== identity) return;
       downloadBlobFile(filename, blob);
       floatingAlert.success(t("diagrams.detail.exported", { file: filename }));

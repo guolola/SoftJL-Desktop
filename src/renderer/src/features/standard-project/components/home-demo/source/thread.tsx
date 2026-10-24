@@ -19,7 +19,6 @@ import { ConversationBudget } from "./conversation-budget.js";
 import { Greeting } from "./greeting.js";
 import { ProjectThreadMessage } from "../integration/project-thread-message.js";
 import { FollowUps, Suggestions } from "../integration/intro-entry.js";
-import { ConversationLoading } from "../../conversation-loading.js";
 
 const isNewChatView = (s: AssistantState) =>
   s.thread.messages.length === 0 &&
@@ -61,7 +60,9 @@ export function Thread(): ReactNode {
       <ThreadPrimitive.ViewportProvider>
         <ThreadPrimitive.Viewport
           data-testid="conversation-message-viewport"
-          turnAnchor="top"
+          // The viewport owns following, pausing on upward scroll and resuming at the bottom.
+          turnAnchor="bottom"
+          autoScroll
           className={cn(
             // The gutter is reserved whether or not a scrollbar is showing, so the
             // thread and its composer do not shift sideways on the first reply
@@ -104,7 +105,6 @@ export function Thread(): ReactNode {
             </ThreadPrimitive.Messages>
           </div>
 
-          <ConversationLoading />
           {isEmpty && footer}
         </ThreadPrimitive.Viewport>
         {!isEmpty && <div className="shrink-0 px-4 md:px-6">{footer}</div>}

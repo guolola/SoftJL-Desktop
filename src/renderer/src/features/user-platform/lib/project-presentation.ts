@@ -10,7 +10,6 @@ import {
 } from "./project-backgrounds.js";
 
 export type StaticProject = {
-  projectMode: "standard" | "professional";
   id: string;
   name: string;
   description: string;
@@ -36,12 +35,6 @@ type StaticProjectMemberPreview = {
   role: string;
   status: string;
 };
-
-export const PROJECT_SCOPE_OPTIONS = [
-  { value: "all", labelKey: "projects.scope.all", shortLabelKey: "projects.scopeShort.all" },
-  { value: "standard", labelKey: "projects.scope.standard", shortLabelKey: "projects.scopeShort.standard" },
-  { value: "professional", labelKey: "projects.scope.professional", shortLabelKey: "projects.scopeShort.professional" },
-] as const;
 
 function displayNameFromUser(user: PlatformUser | null | undefined) {
   return user?.displayName?.trim() || user?.username || user?.id || "";
@@ -148,7 +141,6 @@ export function projectFromApi(
   const background = resolveProjectBackground(project.backgroundKey);
   return {
     id: project.id,
-    projectMode: project.projectMode,
     name: project.name,
     description: project.description ?? noDescription,
     owner: ownerName,

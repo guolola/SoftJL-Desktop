@@ -28,7 +28,7 @@ export async function verifyConversationCoding(page, projectId, screenshots) {
   await page.route(stateUrl, serveState); await page.route(codingUrl, serveCoding); await page.route(`${codingUrl}/approvals/*`, decide);
   try {
     await page.goto(new URL(projectPath, page.url()).href);
-    await page.locator('[data-slot="generation-loader"]').waitFor();
+    await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
     assert.equal(await page.getByRole("button", { name: /代码目录/ }).count(), 0);
     assert.equal(await page.getByText(directory, { exact: true }).count(), 0);
     snapshot.state.conversation.push({ id: "coding-edit", role: "assistant", text: "", createdAt: new Date().toISOString(), status: "completed",
@@ -36,7 +36,7 @@ export async function verifyConversationCoding(page, projectId, screenshots) {
     status.approvals = [{ id: "edit-review", runId: "coding-smoke-run", toolCallId: "coding-edit-call", tool: "edit", title: "修改项目文件", directory,
       dialog: "select", options: ["Yes", "No"], detail: "修改借阅上限", arguments: { path: "limit.ts", edits: [{ oldText: "export const limit = 4;", newText: "export const limit = 5;" }] } }];
     await page.locator('[data-slot="code-diff"]').waitFor();
-    await page.locator('[data-slot="generation-loader"]').waitFor({ state: "hidden" });
+    assert.equal(await page.locator('[data-slot="generation-loader"]').count(), 0);
     assert.ok((await page.locator('[data-slot="code-diff"]').innerText()).includes("export const limit = 5;"));
     if (screenshots) await page.screenshot({ path: join(screenshots, "coding-approval.png"), animations: "disabled" });
     await page.getByRole("button", { name: "Yes", exact: true }).click();

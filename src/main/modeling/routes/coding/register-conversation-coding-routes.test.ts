@@ -1,5 +1,5 @@
 // Exercises approval responses through authenticated HTTP, including active-run and membership checks.
-import type { ExtensionUIContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import test from "node:test";
 import assert from "node:assert/strict";
 import Fastify from "fastify";
@@ -19,7 +19,7 @@ test("only a project member can approve a current run, once; stopped reviews and
   const other = auth.createUser({ username: "other", displayName: "Other", passwordHash: "test" })!;
   const cookie = (id: string) => `uml_session=${auth.createSession({ userId: id, ipAddress: null, userAgent: "test" }).id}`;
   const headers = { cookie: cookie(owner.id) }, outsider = { cookie: cookie(other.id) };
-  const { project } = auth.createProject({ ownerUserId: owner.id, name: "Coding", description: null, projectMode: "standard" });
+  const { project } = auth.createProject({ ownerUserId: owner.id, name: "Coding", description: null, });
   let selected: string | null = null;
   const service = new ConversationCodingService({ read: async () => selected, write: async (_, value) => { selected = value; } }, data);
   t.after(async () => { controller.abort(); service.close(); await app.close(); await rm(root, { recursive: true, force: true }); });
@@ -49,4 +49,41 @@ test("only a project member can approve a current run, once; stopped reviews and
   state.run.status = "stopped"; save();
   assert.equal((await app.inject({ method: "POST", url: `${base}/approvals/${review.id}`, headers, payload: { runId: "run", value: true } })).statusCode, 409);
   controller.abort(); assert.equal(await pending, false);
+});
+
+test("only the native chooser for the active waiting request may set a workspace during generation", async t => {
+  const root = await mkdtemp(join(tmpdir(), "softjl-coding-chooser-http-"));
+  const directory = join(root, "project"), data = join(root, "data"); await Promise.all([mkdir(directory), mkdir(data)]);
+  const auth = createInMemoryAuthStore(), app = Fastify(), controller = new AbortController();
+  const owner = auth.createUser({ username: "chooser", displayName: "Owner", passwordHash: "test" })!;
+  const cookie = `uml_session=${auth.createSession({ userId: owner.id, ipAddress: null, userAgent: "test" }).id}`;
+  const { project } = auth.createProject({ ownerUserId: owner.id, name: "Coding", description: null, });
+  let selected: string | null = null;
+  const service = new ConversationCodingService({ read: async () => selected, write: async (_, value) => { selected = value; } }, data);
+  t.after(async () => { controller.abort(); service.close(); await app.close(); await rm(root, { recursive: true, force: true }); });
+  const state = createStandardProjectState(); state.run = { id: "run", operation: "chat", status: "running", startedAt: "now" };
+  const save = () => auth.saveProjectWorkspace({ projectId: project.id, baseVersion: auth.getProjectWorkspace(project.id).version, updatedByUserId: owner.id, state: { standardProject: state } });
+  save();
+  const run = await service.open(project.id, "run", controller.signal); t.after(run.close);
+  let chooser!: ToolDefinition;
+  await run.extension({ on() {}, registerTool: (tool: ToolDefinition) => { if (tool.name === "select_code_directory") chooser = tool; } } as never);
+  const waiting = chooser.execute("choose", {}, controller.signal, undefined, {} as never);
+  void waiting.catch(() => {});
+  const prompt = (await service.status(project.id)).approvals[0]!;
+  registerConversationCodingRoutes(app, auth, service, "native");
+  const url = `/api/desktop/projects/${project.id}/conversation-code`;
+  const headers = { cookie, "x-softjl-directory-selection": "native" };
+  const request = { runId: "run", approvalId: prompt.id };
+  assert.equal((await app.inject({ method: "POST", url, headers: { cookie }, payload: { directory, request } })).statusCode, 403);
+  assert.equal((await app.inject({ method: "POST", url, headers, payload: { directory } })).statusCode, 409);
+  assert.equal((await app.inject({ method: "POST", url, headers, payload: { directory, request: { ...request, runId: "old" } } })).statusCode, 409);
+  assert.equal((await app.inject({ method: "POST", url, headers, payload: { directory, request: { ...request, approvalId: "invented" } } })).statusCode, 409);
+  assert.equal((await app.inject({ method: "POST", url: `${url}/approvals/${prompt.id}`, headers: { cookie }, payload: { runId: "run", value: directory } })).statusCode, 409);
+  state.run.status = "stopped"; save();
+  assert.equal((await app.inject({ method: "POST", url, headers, payload: { directory, request } })).statusCode, 409);
+  state.run.status = "running"; save();
+  const chosen = await app.inject({ method: "POST", url, headers, payload: { directory, request } });
+  assert.equal(chosen.statusCode, 200, chosen.body); await waiting;
+  assert.equal(run.workspaceSelected(), true); assert.equal(selected, chosen.json().directory);
+  assert.equal((await app.inject({ method: "POST", url, headers, payload: { directory, request } })).statusCode, 409);
 });

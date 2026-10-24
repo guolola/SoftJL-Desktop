@@ -16,7 +16,6 @@ import type {
   ProjectStatus,
   UserStatus,
 } from "../../../shared/contracts/index.js";
-import { projectModeSchema } from "../../../shared/contracts/index.js";
 import type { Queryable } from "../db/transactions.js";
 import type {
   AdminInvitationRecord,
@@ -72,7 +71,6 @@ function mapOnboardingRow(row?: OnboardingRow): OnboardingStateResponse {
 }
 
 type ProjectRow = {
-  project_mode: "standard" | "professional";
   id: string;
   name: string;
   description: string | null;
@@ -218,7 +216,6 @@ function mapSessionRow(row: SessionRow): SessionRecord {
 
 function mapProjectRow(row: ProjectRow): ProjectRecord {
   return {
-    projectMode: projectModeSchema.parse(row.project_mode),
     id: row.id,
     name: row.name,
     description: row.description,
@@ -330,7 +327,6 @@ const sessionColumns = `
 `;
 
 const projectColumns = `
-  project_mode,
   id,
   name,
   description,
@@ -832,7 +828,6 @@ async createMfaChallenge(userId: string) {
     },
 
     async createProject(input: {
-      projectMode?: "standard" | "professional";
       ownerUserId: string;
       name: string;
       description: string | null;
@@ -847,10 +842,9 @@ async createMfaChallenge(userId: string) {
             name,
             description,
             retention_policy,
-            background_key,
-            project_mode
+            background_key
           )
-          values ($1, $2, $3, $4, $5, $6, $7)
+          values ($1, $2, $3, $4, $5, $6)
           returning ${projectColumns}
         `,
         [
@@ -860,7 +854,6 @@ async createMfaChallenge(userId: string) {
           input.description,
           input.retentionPolicy ?? "manual",
           input.backgroundKey ?? null,
-          input.projectMode ?? "professional",
         ],
       );
       const project = mapProjectRow(projectResult.rows[0]);

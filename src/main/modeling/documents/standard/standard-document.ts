@@ -34,9 +34,9 @@ export async function buildStandardDocument(state: StandardProjectState, kind: "
     sources.set(diagram.id, buildStandardDiagram(diagram.kind, diagram.model).source);
     sections.push({ level: 2, title: diagram.title, body: [], diagramKind: diagram.kind === "er" ? "class" : diagram.kind, diagramModelId: diagram.id });
   }
-  // Ordinary projects share cover, numbering, fonts, contents and editor files with professional documents.
+  // Assemble saved sections and diagram snapshots with the configured cover, numbering and fonts.
   const missing: string[] = [];
-  const buffer = await renderDocumentBuffer(kind, sections, sources, new Set(sources.keys()), render, missing, document.documentStyle);
+  const buffer = await renderDocumentBuffer(kind, sections, sources, new Set(sources.keys()), render, missing, document.documentStyle, { projectName: state.outline?.title });
   if (missing.length) throw new Error(`文档图表渲染失败：${missing.join("；")}`);
   return buffer;
 }

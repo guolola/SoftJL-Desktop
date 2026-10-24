@@ -25,3 +25,10 @@ export function assistantActivityGroup(messages: readonly StandardConversationMe
   // replace the disclosure and reset the reader's expansion choice.
   return { start, messages: group };
 }
+
+export function assistantIntroductionIds(messages: readonly StandardConversationMessage[]): ReadonlySet<string> {
+  const lastToolIndex = messages.reduce((last, message, index) => message.tools?.length ? index : last, -1);
+  // Pi emits a tool-requesting message before executing its tools. Text through
+  // that boundary describes upcoming work; later text is the resulting answer.
+  return new Set(messages.flatMap((message, index) => index <= lastToolIndex && message.text.trim() ? [message.id] : []));
+}

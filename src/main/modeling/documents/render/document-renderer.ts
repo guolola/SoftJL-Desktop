@@ -21,7 +21,6 @@ import {
   type DocumentKind,
   type DocumentSection,
   type UmlDiagramKind,
-  type FeasibilityInputs,
 } from "../../../../shared/contracts/index.js";
 import { documentDiagramLabel, documentTitle } from "../context/document-context.js";
 import { type PngRenderClient } from "../../adapters/render/png-render-client.js";
@@ -290,56 +289,18 @@ function coverValue(value: string | number | null | undefined) {
     : String(value);
 }
 
-function feasibilityCoverProjectTitle(projectName: string | null | undefined) {
-  const normalized = projectName?.trim();
-  if (!normalized) return "XXXX系统";
-  return normalized.endsWith("系统") ? normalized : `${normalized}系统`;
-}
-
-function createFeasibilityCoverTable(inputs: FeasibilityInputs, style: ResolvedDocumentStyle) {
-  const rows = [
-    ["项目名称", coverValue(inputs.projectName)],
-    ["小组编号", coverValue(inputs.groupNumber)],
-    ["成员及学号", coverValue(inputs.members)],
-    ["年级班级", coverValue(inputs.gradeClass)],
-    ["所在学院", coverValue(inputs.college)],
-    ["提交日期", coverValue(inputs.submissionDate)],
-  ];
-  return new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    rows: rows.map(([label, value]) => new TableRow({
-      children: [
-        new TableCell({ width: { size: 28, type: WidthType.PERCENTAGE }, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [createTextRun(label, style.table, true)], spacing: spacingForStyle(style.table) })] }),
-        new TableCell({ width: { size: 72, type: WidthType.PERCENTAGE }, children: [new Paragraph({ children: [createTextRun(value, style.table)], spacing: spacingForStyle(style.table) })] }),
-      ],
-    })),
-  });
-}
-
 function createDocumentCover(
   documentKind: DocumentKind,
   style: ResolvedDocumentStyle,
-  feasibilityInputs?: FeasibilityInputs,
+  projectName?: string,
 ) {
   const generatedDate = new Date().toISOString().slice(0, 10);
   const documentTemplateVersion = "V1.0";
-  if (documentKind === "feasibilityStudy") {
-    const inputs = feasibilityInputs ?? {
-      projectName: "", school: "", college: "", groupNumber: "", members: "", gradeClass: "", submissionDate: "", proposedBy: "", developedBy: "", expectedUsers: "", targetEnvironment: "", deadline: "", expectedLifetimeYears: null, budgetLimit: null, teamSize: null, teamSkills: "", availableResources: "", legalConstraints: "", references: "", costItems: [], benefitItems: [], analysisYears: null,
-    };
-    return [
-      createCoverParagraph(feasibilityCoverProjectTitle(inputs.projectName), style, { title: true }),
-      createCoverParagraph("可行性分析报告", style, { subtitle: true }),
-      createCoverParagraph(`学校：${coverValue(inputs.school)}`, style),
-      createFeasibilityCoverTable(inputs, style),
-      createCoverParagraph(`${coverValue(inputs.school)} ${coverValue(inputs.college)}`, style),
-    ];
-  }
   return [
     createCoverParagraph("课程设计文档", style, { title: true }),
     createCoverParagraph(documentTitle(documentKind), style, { subtitle: true }),
     createCoverParagraph(
-      `项目名称：${coverValue(feasibilityInputs?.projectName)}`,
+      `项目名称：${coverValue(projectName)}`,
       style,
     ),
     createCoverParagraph(`文档类型：${documentTitle(documentKind)}`, style),
@@ -399,24 +360,17 @@ export async function renderDocumentBuffer(
   pngRenderClient: PngRenderClient,
   missingArtifacts: string[],
   documentStyleSettings?: Parameters<typeof resolveDocumentStyle>[0],
-  feasibilityInputs?: FeasibilityInputs,
+  cover?: { projectName?: string },
 ) {
   // This is the document assembly boundary: callers provide normalized sections
   // and image sources; this module returns a DOCX buffer plus missing-image notes.
   const style = resolveDocumentStyle(documentStyleSettings);
-  const pageMargins = documentKind === "feasibilityStudy"
-    ? { ...style.page, marginLeft: 1800, marginRight: 1800 }
-    : style.page;
-  const renderedSections = style.autoNumberHeadings
-    ? numberDocumentSections(
-        sections,
-        documentKind === "feasibilityStudy" ? { prefix: "A." } : undefined,
-      )
-    : sections;
+  const pageMargins = style.page;
+  const renderedSections = style.autoNumberHeadings ? numberDocumentSections(sections) : sections;
   const frontMatterChildren: Array<Paragraph | Table | TableOfContents> = createDocumentCover(
     documentKind,
     style,
-    feasibilityInputs,
+    cover?.projectName,
   );
 
   if (style.includeTableOfContents) {

@@ -22,7 +22,7 @@ test("HTTP model edits retain native sequence fragments and reject obsolete, unk
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "nativemodel", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Models", description: null, projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Models", description: null, });
   const state = createStandardProjectState();
   const model = validateStandardModel("sequence", modelReviewFixtures("design", "sequence")[1]!.model);
   state.diagrams.sequence = { id: "sequence", kind: "sequence", title: "业务时序", status: "completed", model };
@@ -52,7 +52,7 @@ test("HTTP saves all eight current models and rejects old payloads before render
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "eightmodels", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Eight models", description: null, projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Eight models", description: null, });
   const state = createStandardProjectState();
   for (const kind of standardDiagramKinds) state.diagrams[kind] = { id: kind, kind, title: kind, status: "completed", model: standardModelFixture(kind) };
   const workspace = authStore.getProjectWorkspace(project.id);
@@ -83,7 +83,7 @@ test("model context reads canonical catalog capacity without requiring output me
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "capacity", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Capacity", description: null,  projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Capacity", description: null,  });
   const providerConfigs = createProviderConfigStore({ secret: "test" }); const model = "deepseek-v4.1-flash";
   const config = providerConfigs.create({ name: "test", baseUrl: "https://ai.comfly.org", apiKey: "test", defaultModel: model, allowedModels: [model], createdBy: "test" });
   const dir = await mkdtemp(join(tmpdir(), "uml-context-route-"));
@@ -103,7 +103,7 @@ test("model context reads canonical catalog capacity without requiring output me
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(response.json().capacity.context, 1000000); assert.equal(response.json().capacity.output, null);
   assert.equal(response.json().capacity.source, "modelpedia"); assert.equal(response.json().contextBudget, 1000000); assert.equal(calls, 0);
-  const engineering = authStore.createProject({ ownerUserId: owner.id, name: "Engineering", description: null,  projectMode: "professional" }).project;
+  const engineering = authStore.createProject({ ownerUserId: owner.id, name: "Engineering", description: null,  }).project;
   const sharedUrl = `/api/projects/${engineering.id}/model-context?${new URLSearchParams({ providerConfigId: config.id, model })}`;
   const shared = await app.inject({ url: sharedUrl, headers: { cookie } });
   assert.equal(shared.statusCode, 200, shared.body);
@@ -116,7 +116,7 @@ test("acknowledges chat with its durable user message before model execution and
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "ack", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Chat", description: null,  projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Chat", description: null,  });
   const providerConfigs = createProviderConfigStore({ secret: "test" });
   const config = providerConfigs.create({ name: "test", baseUrl: "https://example.test", apiKey: "test", defaultModel: "test", allowedModels: ["test"], createdBy: "test" });
   const scheduler = createInMemoryLlmScheduler();
@@ -166,7 +166,7 @@ for (const alternative of [false, true]) test(`HTTP ${alternative ? "alternative
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "scope", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Scope", description: null, projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Scope", description: null, });
   const providerConfigs = createProviderConfigStore({ secret: "test" });
   const config = providerConfigs.create({ name: "test", baseUrl: "https://example.test", apiKey: "test", defaultModel: "test", allowedModels: ["test"], createdBy: "test" });
   const state = createStandardProjectState("考研自习室座位预约小程序");
@@ -211,7 +211,7 @@ test("revision commands require current history, valid user content and stored a
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "revision", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Revision", description: null,  projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Revision", description: null,  });
   const providerConfigs = createProviderConfigStore({ secret: "test" });
   const config = providerConfigs.create({ name: "test", baseUrl: "https://ai.comfly.org", apiKey: "test", defaultModel: "test", allowedModels: ["test"], createdBy: "test" });
   const providerSettings = { providerConfigId: config.id, model: "test" };
@@ -240,116 +240,11 @@ test("revision commands require current history, valid user content and stored a
   assert.deepEqual(persisted.conversation, state.conversation); assert.equal(persisted.run, undefined); assert.equal(calls, 0);
 });
 
-test("ordinary endpoints require membership and trusted mode, persist current tests, and prevent forged state", async t => {
-  const app = Fastify(); const authStore = createInMemoryAuthStore();
-  const owner = authStore.createUser({ username: "owner", displayName: "Owner", passwordHash: "test" })!;
-  const other = authStore.createUser({ username: "other", displayName: "Other", passwordHash: "test" })!;
-  const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const outsider = `uml_session=${authStore.createSession({ userId: other.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const providerConfigs = createProviderConfigStore({ secret: "test" });
-  const config = providerConfigs.create({ name: "test", baseUrl: "https://ai.comfly.org", apiKey: "test", defaultModel: "test", allowedModels: ["test"], createdBy: "test" });
-  let calls = 0;
-  const libraryRoot = await mkdtemp(join(tmpdir(), "uml-standard-documents-"));
-  const documentLibrary = createFileDocumentLibrary(libraryRoot);
-  t.after(async () => {
-    assert.ok(resolve(libraryRoot).startsWith(resolve(tmpdir()) + sep));
-    await rm(libraryRoot, { recursive: true, force: true });
-  });
-  registerProjectRoutes({ app, authStore });
-  registerStandardProjectRoutes({ app, authStore, providerConfigs, documentLibrary, llmScheduler: createInMemoryLlmScheduler(),
-    llmTransport: { async *streamChatCompletion() { calls++; yield JSON.stringify({ tests: [{ id: "borrow", businessId: "borrowing", title: "学生借阅", scenarioType: "normal", priority: "P2", preconditions: [], steps: ["提交借阅申请"], expected: "借阅成功" }] }); } },
-    renderClient: async () => { throw new Error("No rendering during clarification"); },
-    pngRenderClient: async () => { throw new Error("No PNG during clarification"); },
-  });
-  t.after(() => app.close());
-  const created = await app.inject({ method: "POST", url: "/api/projects", headers: { cookie }, payload: { name: "普通版" } });
-  assert.equal(created.statusCode, 201); assert.equal(created.json().project.projectMode, "standard");
-  const projectId = created.json().project.id;
-  const initial = createStandardProjectState("图书系统");
-  initial.outline = { title: "图书系统", summary: "图书借阅", roles: [{ id: "student", name: "学生", description: "借阅图书" }],
-    businesses: [{ id: "borrowing", name: "借阅", roleIds: ["student"], description: "借阅图书", steps: ["提交申请"], exceptions: [] }],
-    entities: [{ id: "book", name: "图书", attributes: ["编号"] }], relationships: [], modules: ["图书借阅"], assumptions: [] };
-  initial.diagrams.usecase = { id: "usecase", kind: "usecase", title: "用例图", status: "completed", model: standardModelFixture("usecase"), svg: "<svg/>" };
-  authStore.saveProjectWorkspace({ projectId, baseVersion: 0, updatedByUserId: owner.id, state: { standardProject: initial } });
-  const { project: pro } = authStore.createProject({ ownerUserId: owner.id, name: "旧项目", description: null,  });
-  const path = `/api/projects/${projectId}/standard`;
-  const capacityUrl = `${path.replace(/\/standard$/, "")}/model-context?providerConfigId=${config.id}&model=test`;
-  assert.equal((await app.inject({ url: capacityUrl })).statusCode, 401);
-  assert.equal((await app.inject({ url: capacityUrl, headers: { cookie: outsider } })).statusCode, 403);
-  const capacity = await app.inject({ url: capacityUrl, headers: { cookie } });
-  assert.equal(capacity.statusCode, 200);
-  assert.equal(capacity.json().capacity.source, "unknown");
-  assert.equal(calls, 0, "reading capacity must not start an LLM call");
-  assert.equal((await app.inject({ url: `${path.replace(/\/standard$/, "")}/model-context?providerConfigId=${config.id}&model=unconfigured`, headers: { cookie } })).statusCode, 400);
-  assert.equal((await app.inject({ method: "GET", url: path })).statusCode, 401);
-  assert.equal((await app.inject({ method: "GET", url: path, headers: { cookie: outsider } })).statusCode, 403);
-  assert.equal((await app.inject({ method: "POST", url: `/api/projects/${pro.id}/standard`, headers: { cookie }, payload: { operation: "tests", projectMode: "standard" } })).statusCode, 409);
-  const providerSettings = { providerConfigId: config.id, model: "test" };
-  const obsolete = await app.inject({ method: "POST", url: path, headers: { cookie }, payload: { operation: "prepare", description: "图书系统", providerSettings } });
-  assert.equal(obsolete.statusCode, 400);
-  assert.equal((await app.inject({ method: "POST", url: path, headers: { cookie }, payload: { operation: "chat", message: "你好", description: "旧独立需求", providerSettings } })).statusCode, 400);
-  assert.equal(calls, 0, "obsolete workflow commands must fail before calling the provider");
-  const payload = JSON.stringify({ operation: "tests", requestId: "11111111-1111-4111-8111-111111111111", providerSettings });
-  // Browser fetch defaults string bodies to text/plain unless the API wrapper declares JSON.
-  const invalid = await app.inject({ method: "POST", url: path, headers: { cookie, "content-type": "text/plain;charset=UTF-8" }, payload });
-  assert.equal(invalid.statusCode, 400);
-  assert.equal(calls, 0, "invalid request encoding must fail before calling the model");
-  const started = await app.inject({ method: "POST", url: path, headers: { cookie, "content-type": "application/json" }, payload });
-  assert.equal(started.statusCode, 202, started.body);
-  let state;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    state = (await app.inject({ method: "GET", url: path, headers: { cookie } })).json().state;
-    if (state.run.status !== "running") break;
-    await new Promise(resolve => setTimeout(resolve, 5));
-  }
-  assert.equal(state.run.status, "completed", JSON.stringify(state));
-  assert.equal(state.tests[0].id, "borrow"); assert.equal(calls, 1);
-  const repeated = await app.inject({ method: "POST", url: path, headers: { cookie, "content-type": "application/json" }, payload });
-  assert.equal(repeated.statusCode, 200); assert.equal(repeated.json().state.run.id, state.run.id);
-  assert.equal(calls, 1, "replaying an accepted command must return the existing task");
-  const beforeSession = authStore.getProjectWorkspace(projectId);
-  authStore.saveProjectWorkspace({ projectId, baseVersion: beforeSession.version, updatedByUserId: owner.id, state: {
-    ...beforeSession.state, standardProject: { ...state, piSession: { entries: [{ privateToolHistory: "internal" }], leafId: null }, memory: ["使用关系数据库"] },
-  } });
-  const publicWorkspace = await app.inject({ method: "GET", url: `/api/projects/${projectId}/workspace`, headers: { cookie } });
-  assert.equal(publicWorkspace.json().state.standardProject.piSession, undefined);
-  assert.deepEqual(publicWorkspace.json().state.standardProject.memory, ["使用关系数据库"]);
-  const workspace = authStore.getProjectWorkspace(projectId);
-  const save = await app.inject({ method: "PUT", url: `/api/projects/${projectId}/workspace`, headers: { cookie }, payload: { baseVersion: workspace.version, state: { standardProject: { description: "forged" } } } });
-  assert.equal(save.statusCode, 200);
-  assert.equal(save.json().state.standardProject.description, "图书系统");
-  assert.equal(save.json().state.standardProject.piSession, undefined);
-  assert.ok((authStore.getProjectWorkspace(projectId).state.standardProject as Record<string, unknown>).piSession);
-  const rename = await app.inject({ method: "PATCH", url: `/api/projects/${projectId}`, headers: { cookie }, payload: { name: "改名", projectMode: "professional" } });
-  assert.equal(rename.statusCode, 400);
-  const renamed = await app.inject({ method: "PATCH", url: `/api/projects/${projectId}`, headers: { cookie }, payload: { name: "改名" } });
-  assert.equal(renamed.statusCode, 200); assert.equal(renamed.json().project.projectMode, "standard");
-
-  const document = await documentLibrary.saveGeneratedDocument({ workspaceId: `project-${projectId}`, projectId, createdByUserId: owner.id,
-    documentKind: "requirementsSpec", sourceRunId: null, fileName: "需求规格说明书.docx", buffer: Buffer.from("generated Word document") });
-  const beforeDocument = authStore.getProjectWorkspace(projectId);
-  authStore.saveProjectWorkspace({ projectId, baseVersion: beforeDocument.version, updatedByUserId: owner.id, state: {
-    ...beforeDocument.state, standardProject: { ...(beforeDocument.state.standardProject as object), documents: {
-      requirementsSpec: { documentId: document.id, title: "需求规格说明书", markdown: "# 系统需求\n支持图书借阅。", generatedAt: new Date().toISOString(), diagrams: [] },
-    } },
-  } });
-  const publish = `${path}/documents/requirementsSpec/publish`;
-  assert.equal((await app.inject({ method: "POST", url: publish, headers: { cookie } })).statusCode, 404);
-  const documents = await documentLibrary.listAllDocuments({ projectId });
-  assert.equal(documents.length, 1);
-  assert.equal(documents[0].sourceRunId, null);
-  await documentLibrary.updateDocumentBuffer(`project-${projectId}`, document.id, Buffer.from("edited Word document"));
-  const download = await app.inject({ method: "GET", url: `${path}/documents/requirementsSpec/download`, headers: { cookie } });
-  assert.equal(download.statusCode, 200);
-  assert.equal(download.body, "edited Word document");
-  assert.equal(calls, 1, "document downloads do not call the model again");
-});
-
 test("stop preserves completed artifacts and continuation resumes only the saved unfinished scope", async t => {
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "resume", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Recovery", description: "system",  projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Recovery", description: "system",  });
   const providerConfigs = createProviderConfigStore({ secret: "test" });
   const config = providerConfigs.create({ name: "test", baseUrl: "https://ai.comfly.org", apiKey: "test", defaultModel: "test", allowedModels: ["test"], createdBy: "test" });
   const providerSettings = { providerConfigId: config.id, model: "test" };
@@ -396,7 +291,7 @@ test("reconciles a run left by a previous process and preserves its completed ar
   const app = Fastify(); const authStore = createInMemoryAuthStore();
   const owner = authStore.createUser({ username: "restart", displayName: "Owner", passwordHash: "test" })!;
   const cookie = `uml_session=${authStore.createSession({ userId: owner.id, ipAddress: "127.0.0.1", userAgent: "test" }).id}`;
-  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Restart", description: "Saved requirements",  projectMode: "standard" });
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "Restart", description: "Saved requirements",  });
   const workspace = authStore.getProjectWorkspace(project.id);
   const state: StandardProjectState = { ...createStandardProjectState("Saved requirements"),
     run: { id: "previous-process-run", operation: "chat", status: "running", startedAt: new Date(Date.now() - process.uptime() * 1000 - 60000).toISOString(), work: { ids: ["class"] } },

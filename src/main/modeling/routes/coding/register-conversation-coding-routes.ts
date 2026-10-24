@@ -2,15 +2,15 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { ConversationCodingStatus } from "../../../../shared/contracts/workspace/conversation-coding.js";
-import { conversationDialogAnswerSchema } from "../../../../shared/contracts/workspace/conversation-coding.js";
+import type { ConversationCodingStatus, ConversationDirectoryRequest } from "../../../../shared/contracts/workspace/conversation-coding.js";
+import { conversationDialogAnswerSchema, conversationDirectoryRequestSchema } from "../../../../shared/contracts/workspace/conversation-coding.js";
 import type { AuthStore } from "../../auth/in-memory-auth-store.js";
 import { isProjectPermissionError, requireProjectPermission } from "../../auth/guards.js";
 import { readStandardState } from "../../runs/records/standard-project-record.js";
 
 type Service = {
   status: (id: string) => Promise<ConversationCodingStatus>;
-  select: (id: string, path: string | null) => Promise<ConversationCodingStatus>;
+  select: (id: string, path: string | null, request?: ConversationDirectoryRequest) => Promise<ConversationCodingStatus>;
   answer: (projectId: string, runId: string, id: string, value: string | boolean | null) => void;
 };
 export function registerConversationCodingRoutes(app: FastifyInstance, authStore: AuthStore, service: Service, selectionCapability?: string) {
@@ -26,20 +26,23 @@ export function registerConversationCodingRoutes(app: FastifyInstance, authStore
       if (!selectionCapability || typeof header !== "string" || Buffer.byteLength(header) !== Buffer.byteLength(selectionCapability)
         || !timingSafeEqual(Buffer.from(header), Buffer.from(selectionCapability))) return reply.code(403).send({ message: "请通过本机文件夹选择器选择目录" });
     }
-    if (context.project.projectMode === "standard") {
-      const state = readStandardState((await authStore.getProjectWorkspace(projectId)).state);
-      if (state.run?.status === "running") return reply.code(409).send({ message: "请先停止当前任务，再更换目录" });
-    }
-    const parsed = z.object({ directory: z.string().min(1).max(32767) }).strict().safeParse(request.body);
+    const parsed = z.object({ directory: z.string().min(1).max(32767), request: conversationDirectoryRequestSchema.optional() }).strict().safeParse(request.body);
     if (method === "POST" && !parsed.success) return reply.code(400).send({ message: "目录参数无效" });
-    try { return await service.select(projectId, method === "POST" && parsed.success ? parsed.data.directory : null); }
+    const selection = method === "POST" && parsed.success ? parsed.data.request : undefined;
+    {
+      const state = readStandardState((await authStore.getProjectWorkspace(projectId)).state);
+      if (selection) {
+        if (state.run?.id !== selection.runId || state.run.status !== "running") return reply.code(409).send({ message: "文件夹选择请求已失效" });
+      } else if (state.run?.status === "running") return reply.code(409).send({ message: "请先停止当前任务，再更换目录" });
+    }
+    try { return await service.select(projectId, method === "POST" && parsed.success ? parsed.data.directory : null, selection); }
     catch (error) { return reply.code(409).send({ message: error instanceof Error ? error.message : "目录不可用" }); }
   } });
   app.post(`${base}/approvals/:approvalId`, async (request, reply) => {
     const { projectId, approvalId } = request.params as { projectId: string; approvalId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "start_runs");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard" || context.project.status !== "active") return reply.code(409).send({ message: "会话已不可用" });
+    if (context.project.status !== "active") return reply.code(409).send({ message: "会话已不可用" });
     const parsed = conversationDialogAnswerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ message: "审批参数无效" });
     const state = readStandardState((await authStore.getProjectWorkspace(projectId)).state);

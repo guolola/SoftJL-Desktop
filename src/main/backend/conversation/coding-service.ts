@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import type { ExtensionUIContext, ExtensionUIDialogOptions } from "@earendil-works/pi-coding-agent";
-import type { ConversationApproval, ConversationCodingStatus } from "../../../shared/contracts/workspace/conversation-coding.js";
+import type { ConversationApproval, ConversationCodingStatus, ConversationDirectoryRequest } from "../../../shared/contracts/workspace/conversation-coding.js";
 import type { ConversationCodingHost } from "../../modeling/adapters/coding/conversation-coding-host.js";
 import { codingExtension } from "./coding-tools.js";
 import { desktopPiPackages, piPackagePath, preparePiWorkspace } from "./pi-packages.js";
@@ -26,8 +26,16 @@ export class ConversationCodingService implements ConversationCodingHost {
     return { directory: await this.store.read(projectId), notices: this.notices.get(projectId) ?? [], busy: this.runs.has(projectId) || this.changing.has(projectId),
       approvals: [...this.pending.values()].filter(item => item.projectId === projectId).map(item => item.approval) };
   }
-  async select(projectId: string, directory: string | null) {
-    if (this.runs.has(projectId) || this.changing.has(projectId)) throw new Error("请先停止当前任务或等待目录保存，再切换项目目录");
+  async select(projectId: string, directory: string | null, request?: ConversationDirectoryRequest) {
+    // A running task may receive its first workspace only through its own pending native chooser.
+    const waiting = request ? this.pending.get(request.approvalId) : undefined;
+    const assertWaiting = () => {
+      if (!request || !waiting || this.pending.get(request.approvalId) !== waiting || waiting.projectId !== projectId
+        || waiting.approval.dialog !== "directory" || waiting.approval.runId !== request.runId
+        || this.runs.get(projectId)?.runId !== request.runId || !directory) throw new Error("文件夹选择请求已失效");
+    };
+    if (request) assertWaiting();
+    if ((!request && this.runs.has(projectId)) || this.changing.has(projectId)) throw new Error("请先停止当前任务或等待目录保存，再切换项目目录");
     this.changing.add(projectId);
     try {
       let canonical: string | null = null;
@@ -38,7 +46,9 @@ export class ConversationCodingService implements ConversationCodingHost {
           || insideDirectory(canonical, protectedPath) || insideDirectory(protectedPath, canonical))
           throw new Error("请选择具体项目文件夹，不能选择磁盘根目录或应用数据目录");
       }
+      if (request) { assertWaiting(); if (await this.store.read(projectId)) throw new Error("当前任务已有代码目录"); assertWaiting(); }
       await this.store.write(projectId, canonical);
+      if (request) { assertWaiting(); waiting!.finish(canonical); }
     } finally { this.changing.delete(projectId); }
     return this.status(projectId);
   }
@@ -47,12 +57,13 @@ export class ConversationCodingService implements ConversationCodingHost {
     if (!item || item.projectId !== projectId || item.approval.runId !== runId || this.runs.get(projectId)?.runId !== runId)
       throw new Error("此交互已失效，请刷新当前会话");
     const prompt = item.approval;
+    if (prompt.dialog === "directory" && value !== null) throw new Error("请通过本机文件夹选择器选择目录");
     if (value !== null && (prompt.dialog === "confirm" ? typeof value !== "boolean"
       : typeof value !== "string" || (prompt.dialog === "select" && !prompt.options?.includes(value)))) throw new Error("回答不符合插件提供的选项");
     item.finish(value);
   }
   private async dialog(projectId: string, runId: string, directory: string, signal: AbortSignal,
-    dialog: "select" | "input" | "confirm", title: string, extra: Partial<ConversationApproval>, opts?: ExtensionUIDialogOptions): Promise<Answer> {
+    dialog: ConversationApproval["dialog"], title: string, extra: Partial<ConversationApproval>, opts?: ExtensionUIDialogOptions): Promise<Answer> {
     const combined = AbortSignal.any([signal, ...(opts?.signal ? [opts.signal] : [])]);
     if (combined.aborted) return null;
     const id = randomUUID();
@@ -60,7 +71,7 @@ export class ConversationCodingService implements ConversationCodingHost {
     return new Promise(resolve => {
       const finish = (answer: Answer) => { clearTimeout(timer); combined.removeEventListener("abort", abort); this.pending.delete(id); resolve(answer); };
       const abort = () => finish(null);
-      const timer = setTimeout(abort, opts?.timeout ?? 5 * 60_000);
+      const timer = dialog === "directory" ? undefined : setTimeout(abort, opts?.timeout ?? 5 * 60_000);
       this.pending.set(id, { projectId, approval: { id, runId, toolCallId: active?.id ?? "", tool: active?.name ?? "pi_dialog", arguments: active?.arguments, title, directory, detail: "", dialog, ...extra }, finish });
       combined.addEventListener("abort", abort, { once: true });
       if (combined.aborted) abort();
@@ -74,11 +85,23 @@ export class ConversationCodingService implements ConversationCodingHost {
     this.notices.delete(projectId);
     try {
       const directory = await this.store.read(projectId);
+      combined.throwIfAborted();
+      let selectedWorkspace: string | null = null;
+      const requestDirectory = async () => {
+        combined.throwIfAborted();
+        if (selectedWorkspace) return selectedWorkspace;
+        const selected = await this.dialog(projectId, runId, "", combined, "directory", "生成代码前请选择保存文件夹", { tool: "choose_code_directory" });
+        combined.throwIfAborted();
+        if (typeof selected !== "string") throw new Error("未选择代码文件夹，已取消本轮代码生成。");
+        selectedWorkspace = selected;
+        return selected;
+      };
       // Non-coding sessions still need a real private cwd for plugin configuration and web artifacts.
       const cwd = directory ?? join(this.protectedDirectory, "pi-workspaces", Buffer.from(projectId).toString("hex"));
       await mkdir(cwd, { recursive: true });
       const ask = (kind: "select" | "input" | "confirm", title: string, extra: Partial<ConversationApproval>, opts?: ExtensionUIDialogOptions) => this.dialog(projectId, runId, cwd, combined, kind, title, extra, opts);
-      return { enabled: Boolean(directory), cwd, activeTool: (tool: { id: string; name: string; arguments: Record<string, unknown> } | null) => { if (tool) this.activeTools.set(projectId, tool); else this.activeTools.delete(projectId); }, extension: codingExtension(directory),
+      return { enabled: Boolean(directory), cwd, workspaceSelected: () => selectedWorkspace !== null,
+        activeTool: (tool: { id: string; name: string; arguments: Record<string, unknown> } | null) => { if (tool) this.activeTools.set(projectId, tool); else this.activeTools.delete(projectId); }, extension: codingExtension(directory, requestDirectory),
         additionalExtensionPaths: desktopPiPackages.filter(name => directory || !["pi-fff", "@gotgenes/pi-subagents"].includes(name)).map(piPackagePath),
         prepare: (model: { provider: string; id: string }) => preparePiWorkspace(cwd, model),
         createUI: (base: ExtensionUIContext): ExtensionUIContext => ({ ...base,

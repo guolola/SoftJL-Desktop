@@ -113,7 +113,7 @@ try {
   await page.screenshot({ path: join(artifacts, "projects-narrow.png") });
   const created = await page.evaluate(async () => {
     const response = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "桌面外壳验证项目", projectMode: "standard", description: null }) });
+      body: JSON.stringify({ name: "桌面外壳验证项目", description: null }) });
     if (!response.ok) throw new Error(await response.text());
     return response.json();
   });

@@ -21,3 +21,14 @@ test("terminal notices mark running tools failed and summarize results only once
   assert.match(state.conversation.at(-1)!.text, /成功 1 张，失败 1 张/);
   assert.match(state.conversation.at(-1)!.text, /用例图：生成已停止/);
 });
+
+test("final results cover earlier failures even after Pi changed its latest continuation target", () => {
+  const state = createStandardProjectState();
+  state.run = { id: "r", operation: "chat", status: "completed", startedAt: "now",
+    diagramIds: ["class", "usecase"], work: { ids: ["class"] } };
+  state.diagrams = { class: { id: "class", kind: "class", title: "设计类图", status: "completed" },
+    usecase: { id: "usecase", kind: "usecase", title: "用例图", status: "failed", error: "仍无法生成" } };
+  appendStandardGenerationResult(state);
+  assert.match(state.conversation!.at(-1)!.text, /成功 1 张，失败 1 张/);
+  assert.match(state.conversation!.at(-1)!.text, /用例图：仍无法生成/);
+});

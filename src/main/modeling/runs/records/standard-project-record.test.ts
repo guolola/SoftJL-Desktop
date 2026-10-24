@@ -32,7 +32,7 @@ test("pending unsupported-model consent survives workspace reads without being c
 test("all eight model writes are validated before persistence and keep private context", async () => {
   const store = createInMemoryAuthStore();
   const owner = store.createUser({ username: "currentmodels", displayName: "Owner", passwordHash: "test" })!;
-  const { project } = store.createProject({ ownerUserId: owner.id, name: "Current models", description: null, projectMode: "standard" });
+  const { project } = store.createProject({ ownerUserId: owner.id, name: "Current models", description: null, });
   await updateStandardState(store, project.id, owner.id, state => {
     state.piSession = { entries: [], leafId: null }; state.acceptedCommands = ["current"];
     for (const kind of standardDiagramKinds) state.diagrams[kind] = { id: kind, kind, title: kind, status: "completed", model: standardModelFixture(kind) };

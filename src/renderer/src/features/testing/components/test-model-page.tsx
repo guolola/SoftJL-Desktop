@@ -1,347 +1,27 @@
 // Builds black-box test cases and coverage links from requirement and design models.
-import { getRuleDisplayLabel } from "../../../entities/requirement-rule/model.js";
 import { Card } from "../../../shared/ui/card.js";
 import { useEffect, useMemo, useState } from "react";
 import type { ColumnDef, PaginationState } from "@tanstack/react-table";
 import { useTranslation } from "react-i18next";
 import { PageContainer, PageHeader } from "../../../shared/template/layout/page.js";
-import type { TFunction } from "i18next";
 import { Filter, ShieldCheck } from "lucide-react";
-import type {
-  BlackBoxTestCase,
-  DesignDiagramModelSpec,
-  ModelElementRef,
-  RequirementModelTraceabilityEntry,
-  RequirementRule,
-  TestCoverageRelation,
-  TestGenerationResult,
-  TestScenarioType,
-  UseCaseDiagramSpec,
-  UseCaseEventFlow,
-} from "../../../../../shared/contracts/index.js";
+import type { BlackBoxTestCase, TestCoverageRelation, TestScenarioType } from "../../../../../shared/contracts/index.js";
 import { Badge } from "../../../shared/ui/badge.js";
-import { ModelingGenerationButton } from "../../../shared/ui/modeling-generation-button.js";
 import { SelectControl } from "../../../shared/ui/select.js";
 import { StudioDataTable } from "../../../shared/ui/studio-data-table.js";
-import {
-  FeedbackReopenButton,
-  useFeedbackDialog,
-  type FeedbackDialogState,
-} from "../../../shared/ui/feedback-dialog.js";
 import { cn } from "../../../shared/ui/utils.js";
 import { categoryChipTone } from "../../../shared/ui/category-tones.js";
-import { useWorkspaceShell } from "../../workspace-shell/state.js";
-import { useWorkspaceSession } from "../../workspace-session/state.js";
-import { findRequirementModelByKind } from "../../../entities/diagram/model.js";
 
 const SCENARIO_TYPES: Array<TestScenarioType | "all"> = [
   "all", "normal", "alternative", "exception", "boundary", "decision-table",
 ];
 
-type SequenceDesignModel = DesignDiagramModelSpec & {
-  diagramKind: "sequence";
-  modelId?: string;
-  sourceUseCaseId?: string;
-  participants: Array<{ id: string; name: string }>;
-  messages: Array<{ id: string; name: string }>;
-};
-
-function isSequenceDesignModel(
-  model: DesignDiagramModelSpec,
-): model is SequenceDesignModel {
-  return model.diagramKind === "sequence";
-}
-
-function formatRuleId(id: string) {
-  const match = /^r(\d+)$/i.exec(id.trim());
-  return match ? `R${match[1]}` : id.toUpperCase();
-}
-
-function priorityForRule(rule?: RequirementRule) {
-  if (!rule) return "P2" as const;
-  if (rule.type === "exception" || rule.type === "business-rule") return "P1" as const;
-  if (rule.type === "functional" || getRuleDisplayLabel(rule) === "数据需求") return "P2" as const;
-  return "P3" as const;
-}
-
-function scenarioFromFlow(flow: UseCaseEventFlow): TestScenarioType {
-  if (flow.flowType === "main") return "normal";
-  if (flow.flowType === "alternative") return "alternative";
-  return "exception";
-}
-
-function rulesForUseCase(
-  rules: RequirementRule[],
-  useCase: UseCaseDiagramSpec["useCases"][number],
-  traceability: RequirementModelTraceabilityEntry[],
-) {
-  const haystack = `${useCase.name} ${useCase.goal} ${useCase.description ?? ""}`;
-  const directlyReferencedRuleIds = new Set(
-    (useCase.eventFlows ?? []).flatMap((flow) =>
-      flow.steps.flatMap((step) => step.sourceRequirementId ?? []),
-    ),
-  );
-  const trustedRuleIds = new Set(
-    traceability
-      .filter(
-        (entry) =>
-          entry.target.diagramKind === "usecase" &&
-          entry.target.elementId === useCase.id,
-      )
-      .map((entry) => entry.ruleId),
-  );
-  return rules.filter((rule) => {
-    if (directlyReferencedRuleIds.has(rule.id) || trustedRuleIds.has(rule.id)) return true;
-    return rule.text.includes(useCase.name) || haystack.includes(rule.text);
-  });
-}
-
-function refsForUseCaseDesign(
-  designModels: DesignDiagramModelSpec[],
-  useCaseId: string,
-): ModelElementRef[] {
-  return designModels
-    .filter(
-      (model): model is SequenceDesignModel =>
-        isSequenceDesignModel(model) && model.sourceUseCaseId === useCaseId,
-    )
-    .flatMap((model) => {
-      const modelId = model.modelId ?? `sequence:${useCaseId}`;
-      return [
-        ...model.participants.map((participant) => ({
-          modelId,
-          diagramKind: model.diagramKind,
-          elementId: participant.id,
-          elementKind: "participant",
-          label: participant.name,
-        })),
-        ...model.messages.map((message) => ({
-          modelId,
-          diagramKind: model.diagramKind,
-          elementId: message.id,
-          elementKind: "message",
-          label: message.name,
-        })),
-      ] satisfies ModelElementRef[];
-    });
-}
-
-// Tests require recorded event flows; missing source behavior must be repaired in the use-case model.
-function hasCompleteEventFlows(model: UseCaseDiagramSpec) {
-  return model.useCases.every(useCase => Array.isArray(useCase.eventFlows) && useCase.eventFlows.length > 0 &&
-    useCase.eventFlows.every(flow => Array.isArray(flow.steps) && flow.steps.length > 0 &&
-      flow.steps.every(step => Boolean(step.actorAction?.trim() || step.systemAction?.trim()) &&
-        Boolean(step.expectedResult?.trim() || step.systemAction?.trim()))));
-}
-
-function buildTestSteps(flow: UseCaseEventFlow) {
-  return flow.steps.map((step, index) => ({
-    order: index + 1,
-    action: step.actorAction || step.systemAction!,
-    expectedResult:
-      step.expectedResult || step.systemAction!,
-  }));
-}
-
-function uniqueStrings(values: Array<string | undefined>) {
-  return Array.from(new Set(values.filter((value): value is string => Boolean(value))));
-}
-
-function generateBlackBoxTests(
-  rules: RequirementRule[],
-  useCaseModel: UseCaseDiagramSpec,
-  designModels: DesignDiagramModelSpec[],
-  traceability: RequirementModelTraceabilityEntry[],
-  t: TFunction,
-): TestGenerationResult {
-  if (!hasCompleteEventFlows(useCaseModel)) throw new Error("Use-case event flows and steps are required.");
-  const testCases: BlackBoxTestCase[] = [];
-  const coverageRelations: TestCoverageRelation[] = [];
-
-  for (const useCase of useCaseModel.useCases) {
-    const matchedRules = rulesForUseCase(rules, useCase, traceability);
-    const flows = useCase.eventFlows;
-    const designRefs = refsForUseCaseDesign(designModels, useCase.id);
-
-    flows.forEach((flow, flowIndex) => {
-      const sourceRule =
-        matchedRules.find((rule) =>
-          flow.steps.some((step) => step.sourceRequirementId === rule.id),
-        ) ?? matchedRules[flowIndex % Math.max(1, matchedRules.length)];
-      const testCase: BlackBoxTestCase = {
-        id: `tc-${useCase.id}-${flow.id}`.replace(/[^A-Za-z0-9_-]/g, "-"),
-        title: `${useCase.name} - ${t(`testingPage.scenarios.${scenarioFromFlow(flow).replace("-", "_")}`)} - ${flow.name}`,
-        sourceRequirementId: sourceRule?.id,
-        sourceRequirementText: sourceRule?.text,
-        sourceUseCaseId: useCase.id,
-        sourceUseCaseName: useCase.name,
-        scenarioType: scenarioFromFlow(flow),
-        priority: priorityForRule(sourceRule),
-        preconditions: useCase.preconditions,
-        testData: uniqueStrings([
-          flow.condition,
-          flow.trigger,
-          sourceRule?.type === "data" ? sourceRule.text : undefined,
-        ]),
-        steps: buildTestSteps(flow),
-        expectedResults: uniqueStrings([
-          ...flow.steps.map((step) => step.expectedResult),
-          ...useCase.postconditions,
-        ]),
-      };
-      testCases.push(testCase);
-      coverageRelations.push({
-        testCaseId: testCase.id,
-        requirementIds: uniqueStrings([
-          sourceRule?.id,
-          ...flow.steps.map((step) => step.sourceRequirementId),
-        ]),
-        useCaseIds: [useCase.id],
-        designModelRefs: designRefs,
-        coverageStatus: sourceRule || designRefs.length > 0 ? "covered" : "partially-covered",
-        rationale: "由用例事件流、确认需求和用例实现设计自动生成覆盖关系",
-      });
-    });
-
-    const boundaryRule = matchedRules.find((rule) =>
-      ["数据需求", "业务规则", "异常处理"].includes(getRuleDisplayLabel(rule)),
-    );
-    if (boundaryRule) {
-      const testCase: BlackBoxTestCase = {
-        id: `tc-${useCase.id}-boundary`,
-        title: `${useCase.name} - 边界值 - ${formatRuleId(boundaryRule.id)}`,
-        sourceRequirementId: boundaryRule.id,
-        sourceRequirementText: boundaryRule.text,
-        sourceUseCaseId: useCase.id,
-        sourceUseCaseName: useCase.name,
-        scenarioType: "boundary",
-        priority: priorityForRule(boundaryRule),
-        preconditions: useCase.preconditions,
-        testData: [`最小值/最大值/空值/重复值覆盖：${boundaryRule.text}`],
-        steps: [
-          {
-            order: 1,
-            action: `按边界条件执行：${useCase.name}`,
-            expectedResult: "系统接受合法边界并拒绝非法边界，提示语准确",
-          },
-        ],
-        expectedResults: ["业务规则、数据约束和异常反馈均符合需求"],
-      };
-      testCases.push(testCase);
-      coverageRelations.push({
-        testCaseId: testCase.id,
-        requirementIds: [boundaryRule.id],
-        useCaseIds: [useCase.id],
-        designModelRefs: refsForUseCaseDesign(designModels, useCase.id),
-        coverageStatus: "covered",
-        rationale: "由规则类别和用例前后置条件生成边界值覆盖",
-      });
-    }
-  }
-
-  const coveredRuleIds = new Set(
-    coverageRelations.flatMap((relation) => relation.requirementIds),
-  );
-  for (const rule of rules.filter((candidate) => !coveredRuleIds.has(candidate.id))) {
-    const isBoundaryRule = ["数据需求", "业务规则", "异常处理"].includes(getRuleDisplayLabel(rule));
-    const testCase: BlackBoxTestCase = {
-      id: `tc-requirement-${rule.id}`.replace(/[^A-Za-z0-9_-]/g, "-"),
-      title: `${formatRuleId(rule.id)} - 需求级验证`,
-      sourceRequirementId: rule.id,
-      sourceRequirementText: rule.text,
-      scenarioType: isBoundaryRule ? "boundary" : "normal",
-      priority: priorityForRule(rule),
-      preconditions: [],
-      testData: uniqueStrings([rule.sourceFragment, rule.text]),
-      steps: [
-        {
-          order: 1,
-          action: `按需求原文执行并核对：${rule.text}`,
-          expectedResult: `可观察结果完整满足 ${formatRuleId(rule.id)}，且不引入原文之外的条件`,
-        },
-      ],
-      expectedResults: [`需求原文“${rule.text}”中的条件、角色、状态和约束均得到验证`],
-    };
-    testCases.push(testCase);
-    coverageRelations.push({
-      testCaseId: testCase.id,
-      requirementIds: [rule.id],
-      useCaseIds: [],
-      designModelRefs: [],
-      coverageStatus: "covered",
-      rationale: "未伪造用例或设计映射；由确认需求原文生成独立、可核验的需求级测试",
-    });
-  }
-
-  return { testCases, coverageRelations };
-}
-
 type DisplayTestCase = Omit<BlackBoxTestCase, "scenarioType" | "priority"> & { scenarioType?: TestScenarioType; priority?: BlackBoxTestCase["priority"] };
 export type TestModelPageData = { testCases: DisplayTestCase[]; coverageRelations: TestCoverageRelation[] };
-export function TestModelPage({ ordinary }: { ordinary?: { result: TestModelPageData } } = {}) {
+export function TestModelPage({ result }: { result: TestModelPageData }) {
   const { t } = useTranslation();
-  const {
-    rules,
-    models,
-    designModels,
-    requirementModelTraceability,
-    testGenerationResult: professionalResult,
-    updateTestGenerationResult,
-    rulesVersion,
-    workspaceInitialized,
-  } = useWorkspaceSession();
-  const { openRequirementsText, openSystemRequirements } = useWorkspaceShell();
-  const { openFeedback, openFeedbackOnce } = useFeedbackDialog();
   const [scenarioFilter, setScenarioFilter] = useState<TestScenarioType | "all">("all");
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: 10 });
-  // Generated models are stored by modelId, which may differ from their diagram kind.
-  const useCaseModel = findRequirementModelByKind(models, "usecase");
-  const result = ordinary?.result ?? professionalResult;
-  const blockedReason = ordinary ? null :
-    !useCaseModel || !("useCases" in useCaseModel) || useCaseModel.useCases.length === 0
-      ? t("testingPage.blocked.usecase")
-      : !hasCompleteEventFlows(useCaseModel)
-        ? t("testingPage.blocked.eventFlows")
-        : rules.length === 0
-          ? t("testingPage.blocked.rules")
-          : null;
-  const blockedByUseCase = Boolean(blockedReason) && blockedReason !== t("testingPage.blocked.rules");
-  const blockFeedback = useMemo<FeedbackDialogState | null>(() => {
-    if (ordinary || !workspaceInitialized || !blockedReason) return null;
-    return {
-      dedupeKey: blockedByUseCase
-        ? "test-generation:usecase"
-        : "test-generation:requirements",
-      revision: `${rulesVersion}:${blockedReason}`,
-      tone: "warning",
-      title: t("testingPage.guidance.title"),
-      message: blockedReason,
-      primaryAction: blockedByUseCase
-        ? {
-            label: t("feedback.actions.requirementModels"),
-            onSelect: openRequirementsText,
-          }
-        : {
-            label: t("feedback.actions.systemRequirements"),
-            onSelect: openSystemRequirements,
-          },
-      keepReopenEntry: true,
-    };
-  }, [
-    blockedByUseCase,
-    blockedReason,
-    openRequirementsText,
-    openSystemRequirements,
-    rulesVersion,
-    t,
-    workspaceInitialized,
-    ordinary,
-  ]);
-
-  useEffect(() => {
-    if (blockFeedback && result?.testCases.length) openFeedbackOnce(blockFeedback);
-  }, [blockFeedback, openFeedbackOnce, result]);
-
   const filteredCases = useMemo(() => {
     const cases = result?.testCases ?? [];
     return scenarioFilter === "all"
@@ -393,15 +73,15 @@ export function TestModelPage({ ordinary }: { ordinary?: { result: TestModelPage
     },
     {
       id: "coverage",
-      header: ordinary ? t("standardProject.businessAndModels") : t("testingPage.columns.coverage"),
+      header: t("standardProject.businessAndModels"),
       size: 210,
       enableSorting: false,
       cell: ({ row }) => {
         const coverage = coverageByCase.get(row.original.id);
         return (
           <div className="flex min-w-40 max-w-64 flex-wrap gap-1 whitespace-normal">
-            {(coverage?.requirementIds ?? []).map(id => <Badge key={id} variant="outline" className="text-[10px]">{ordinary ? id : formatRuleId(id)}</Badge>)}
-            {(coverage?.useCaseIds ?? []).map(id => <Badge key={id} variant="secondary" className="text-[10px]">{useCaseModel && "useCases" in useCaseModel ? useCaseModel.useCases.find(useCase => useCase.id === id)?.name ?? row.original.sourceUseCaseName ?? t("testingPage.summary.usecases") : row.original.sourceUseCaseName ?? t("testingPage.summary.usecases")}</Badge>)}
+            {(coverage?.requirementIds ?? []).map(id => <Badge key={id} variant="outline" className="text-[10px]">{id}</Badge>)}
+            {(coverage?.useCaseIds ?? []).map(id => <Badge key={id} variant="secondary" className="text-[10px]">{id}</Badge>)}
           </div>
         );
       },
@@ -420,7 +100,7 @@ export function TestModelPage({ ordinary }: { ordinary?: { result: TestModelPage
         )}>{row.original.priority ?? t("standardProject.unspecified")}</span>
       ),
     },
-  ], [coverageByCase, t, ordinary, useCaseModel]);
+  ], [coverageByCase, t]);
 
   const coveredRequirements = new Set(
     (result?.coverageRelations ?? []).flatMap((item) => item.requirementIds),
@@ -434,46 +114,7 @@ export function TestModelPage({ ordinary }: { ordinary?: { result: TestModelPage
       <div className="flex w-full flex-col gap-5">
           <PageHeader
             title={t("testingPage.title")}
-            description={ordinary ? t("standardProject.testDescription") : t("testingPage.description")}
-            notice={blockedReason ? <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span>{blockedReason}</span>{blockFeedback?.keepReopenEntry ? <FeedbackReopenButton feedback={blockFeedback} /> : null}</div> : null}
-            actions={!ordinary &&
-              <ModelingGenerationButton
-                type="button"
-                label={t("common.generate")}
-                disabled={Boolean(blockedReason)}
-                onClick={async () => {
-                  if (ordinary) return;
-                  if (blockedReason || !useCaseModel || !("useCases" in useCaseModel) || !hasCompleteEventFlows(useCaseModel)) return;
-                  try {
-                    const nextResult = generateBlackBoxTests(
-                      rules,
-                      useCaseModel,
-                      Object.values(designModels),
-                      requirementModelTraceability,
-                      t,
-                    );
-                    await updateTestGenerationResult(nextResult);
-                    openFeedback({
-                      dedupeKey: "testing:generation:completed",
-                      revision: rulesVersion,
-                      tone: "success",
-                      title: t("testingPage.feedback.successTitle"),
-                      message: t("testingPage.feedback.successMessage", {
-                        count: nextResult.testCases.length,
-                      }),
-                    });
-                  } catch {
-                    openFeedback({
-                      dedupeKey: "testing:generation:failed",
-                      revision: rulesVersion,
-                      tone: "destructive",
-                      title: t("testingPage.feedback.failureTitle"),
-                      message: t("testingPage.feedback.failureMessage"),
-                    });
-                  }
-                }}
-              />
-            }
+            description={t("standardProject.testDescription")}
           />
 
           <div
@@ -482,9 +123,9 @@ export function TestModelPage({ ordinary }: { ordinary?: { result: TestModelPage
           >
             {[
               [t("testingPage.summary.cases"), result?.testCases.length ?? 0],
-              [ordinary ? t("standardProject.relatedBusiness") : t("testingPage.summary.requirements"), coveredRequirements.size],
-              [ordinary ? t("standardProject.relatedModels") : t("testingPage.summary.usecases"), coveredUseCases.size],
-              [ordinary ? t("standardProject.relatedRecords") : t("testingPage.summary.relations"), result?.coverageRelations.length ?? 0],
+              [t("standardProject.relatedBusiness"), coveredRequirements.size],
+              [t("standardProject.relatedModels"), coveredUseCases.size],
+              [t("standardProject.relatedRecords"), result?.coverageRelations.length ?? 0],
             ].map(([label, value]) => (
               <Card key={label} className="gap-0 py-0 min-w-0 p-4">
                 <div className="truncate text-sm text-muted-foreground">

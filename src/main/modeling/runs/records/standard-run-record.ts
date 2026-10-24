@@ -34,7 +34,7 @@ async function persist(runs: RunRecordStore, record: RunRecord) {
 export async function startStandardRunRecord(input: { runs: RunRecordStore; state: StandardProjectState;
   previous: StandardProjectState; projectId: string; userId: string; providerConfigId: string; model: string }) {
   const run = input.state.run!;
-  const snapshot = createEmptySnapshot(run.id, "", []);
+  const snapshot = createEmptySnapshot(run.id);
   snapshot.operationType = "quick_modeling";
   snapshot.status = "running";
   snapshot.standardRun = { operation: run.operation, providerConfigId: input.providerConfigId, model: input.model,

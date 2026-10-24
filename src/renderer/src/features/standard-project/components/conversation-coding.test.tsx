@@ -10,7 +10,7 @@ beforeEach(async () => { await i18n.changeLanguage("zh-CN"); });
 function props(): Parameters<typeof ConversationCoding>[0] {
   return { state: { ...createStandardProjectState(), run: { id: "run", operation: "chat", status: "running", startedAt: "now" } }, canEdit: true, canCancel: true, onCancel: vi.fn(async () => {}),
     coding: { available: true, connected: true, status: { directory: "D:/project", approvals: [], busy: false }, error: "", pending: false,
-      decide: vi.fn(async () => {}) } };
+      decide: vi.fn(async () => {}), selectDirectory: vi.fn(async () => {}) } };
 }
 const prompt = { id: "approval", runId: "run", toolCallId: "call", tool: "pi_dialog", title: "Allow write?", directory: "D:/project", detail: "" };
 it("uses OptionList and returns the original upstream choice, including session grants", async () => {
@@ -37,7 +37,7 @@ it("uses ElicitationForm for free text and returns cancellation without authoriz
   const { container, rerender } = render(<ConversationCoding {...p} />);
   expect(container.querySelector('[data-slot="elicitation-form"]')).toBeInTheDocument();
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "只修改测试" } });
-  fireEvent.click(screen.getByRole("button", { name: /Send|Continue|Submit/ }));
+  fireEvent.click(screen.getByRole("button", { name: "提交" }));
   expect(p.coding.decide).toHaveBeenCalledWith("approval", "run", "只修改测试");
   p.coding.status.approvals = [{ ...prompt, id: "confirm", dialog: "confirm", detail: "执行测试" }];
   rerender(<ConversationCoding {...p} />);
@@ -56,7 +56,7 @@ it("previews native edit fragments and preserves editor prefill", () => {
   p.coding.status.approvals = [{ ...prompt, id: "editor", dialog: "input", initialValue: "existing\nanswer", multiline: true }];
   rerender(<ConversationCoding {...p} />);
   expect(screen.getByRole("textbox")).toHaveValue("existing\nanswer");
-  fireEvent.click(screen.getByRole("button", { name: /Send/ }));
+  fireEvent.click(screen.getByRole("button", { name: "提交" }));
   expect(p.coding.decide).toHaveBeenCalledWith("editor", "run", "existing\nanswer");
 });
 it("ignores stale prompts and guards replies when edit access or connection is unavailable", () => {
@@ -86,4 +86,27 @@ it("leaves chat free of directory management both with and without a code direct
 it("hides desktop controls when the native capability is absent", () => {
   const p = props(); p.coding.available = false; render(<ConversationCoding {...p} />);
   expect(screen.queryByRole("region", { name: "会话编码" })).not.toBeInTheDocument();
+});
+
+it("offers the native folder picker for a current request and guards pending or stopped tasks", () => {
+  const p = props(); p.coding.status.directory = null;
+  p.coding.status.approvals = [{ ...prompt, dialog: "directory", title: "生成代码前请选择保存文件夹" }];
+  const { rerender } = render(<ConversationCoding {...p} />);
+  expect(screen.getByText(/选择后会自动继续本次请求/)).toBeInTheDocument();
+  expect(screen.getByText("保存位置").closest('[data-slot="elicitation-form"]')).toBeInTheDocument();
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "取消生成" }));
+  expect(p.onCancel).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "选择文件夹并继续" }));
+  expect(p.coding.selectDirectory).toHaveBeenCalledWith("approval", "run");
+  expect(p.coding.decide).not.toHaveBeenCalled();
+  p.coding.pending = true; rerender(<ConversationCoding {...p} />);
+  expect(screen.getByRole("button", { name: "选择文件夹并继续" })).toBeDisabled();
+  p.coding.pending = false; p.canEdit = false; rerender(<ConversationCoding {...p} />);
+  fireEvent.click(screen.getByRole("button", { name: "选择文件夹并继续" }));
+  expect(p.coding.selectDirectory).toHaveBeenCalledTimes(1);
+  p.canEdit = true; p.coding.connected = false; rerender(<ConversationCoding {...p} />);
+  expect(screen.getByRole("button", { name: "选择文件夹并继续" })).toBeDisabled();
+  p.state.run!.status = "stopped"; rerender(<ConversationCoding {...p} />);
+  expect(screen.queryByRole("button", { name: "选择文件夹并继续" })).not.toBeInTheDocument();
 });

@@ -1,55 +1,44 @@
 // Registers project and membership endpoints; business rules stay in auth store/guards.
-import { createHttpErrorResponse } from "../../server/http-error-response.js";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { ModelSemanticError } from "../../../../shared/contracts/index.js";
-import { normalizeWorkspaceModelState } from "../../normalizers/workspace/model-state.js";
+import { createHttpErrorResponse } from "../../server/http-error-response.js";
 
 import {
-  projectInvitationCreateRequestSchema,
-  projectInvitationResponseSchema,
-  projectInviteeSearchQuerySchema,
-  projectInviteeSearchResponseSchema,
-  projectCreateRequestSchema,
-  projectListResponseSchema,
-  projectMemberInviteRequestSchema,
-  projectMemberResponseSchema,
-  projectMembersResponseSchema,
-  projectMemberUpdateRequestSchema,
-  projectRetentionPolicyUpdateRequestSchema,
-  projectResponseSchema,
-  projectTransferOwnerRequestSchema,
-  projectUpdateRequestSchema,
+projectCreateRequestSchema,
+projectInvitationCreateRequestSchema,
+projectInvitationResponseSchema,
+projectInviteeSearchQuerySchema,
+projectInviteeSearchResponseSchema,
+projectListResponseSchema,
+projectMemberInviteRequestSchema,
+projectMemberResponseSchema,
+projectMemberUpdateRequestSchema,
+projectMembersResponseSchema,
+projectResponseSchema,
+projectRetentionPolicyUpdateRequestSchema,
+projectTransferOwnerRequestSchema,
+projectUpdateRequestSchema,
 } from "../../../../shared/contracts/index.js";
-import {
-  isAuthError,
-  isProjectPermissionError,
-  requireAuth,
-  requireProjectPermission,
-} from "../../auth/guards.js";
 import { toProjectMemberDto } from "../../auth/dto.js";
-import type { AuthStore } from "../../auth/in-memory-auth-store.js";
 import {
-  isWorkspaceSourceRunConstraintError,
-  projectListPayload,
-  projectPayload,
-  projectWorkspaceBodyLimitBytes,
-  projectWorkspacePayload,
-  toProjectInvitationDto,
+isAuthError,
+isProjectPermissionError,
+requireAuth,
+requireProjectPermission,
+} from "../../auth/guards.js";
+import type { AuthStore } from "../../auth/in-memory-auth-store.js";
+import { resolveRegisteredProjectInvitee,searchProjectInvitees } from "../../projects/project-invitation-eligibility.js";
+import {
+projectListPayload,
+projectPayload,
+toProjectInvitationDto
 } from "../../projects/project-route-payloads.js";
 import { requireProjectSettingsContext } from "../../projects/project-settings-access.js";
-import { resolveRegisteredProjectInvitee, searchProjectInvitees } from "../../projects/project-invitation-eligibility.js";
 
 function isSchemaError(error: unknown): error is z.ZodError {
   // Contracts may resolve a workspace-local Zod copy, so constructor identity alone is insufficient.
   return error instanceof z.ZodError || error instanceof Error && error.name === "ZodError" && "issues" in error && Array.isArray(error.issues);
 }
-
-const projectWorkspaceSaveRequestSchema = z.object({
-  baseVersion: z.number().int().min(0),
-  state: z.record(z.string(), z.unknown()),
-  sourceRunId: z.string().trim().min(1).nullable().optional(),
-});
 
 export function registerProjectRoutes({
   app,
@@ -81,7 +70,6 @@ export function registerProjectRoutes({
     }
     const input = parsedInput.data;
     const { project, ownerMember } = await authStore.createProject({
-      projectMode: input.projectMode,
       ownerUserId: auth.user.id,
       name: input.name,
       description: input.description,
@@ -113,88 +101,6 @@ export function registerProjectRoutes({
 
     return projectResponseSchema.parse(projectPayload({ project: context.project, member: context.member }));
   });
-
-  app.get("/api/projects/:projectId/workspace", async (request, reply) => {
-    const { projectId } = request.params as { projectId: string };
-    const context = await requireProjectPermission(
-      request,
-      reply,
-      authStore,
-      projectId,
-      "view_project",
-    );
-    if (isProjectPermissionError(context)) return context;
-
-    try {
-      return projectWorkspacePayload(await authStore.getProjectWorkspace(projectId));
-    } catch (error) {
-      if (error instanceof ModelSemanticError || isSchemaError(error)) {
-        reply.code(409);
-        return createHttpErrorResponse(reply);
-      }
-      throw error;
-    }
-  });
-
-  app.put(
-    "/api/projects/:projectId/workspace",
-    { bodyLimit: projectWorkspaceBodyLimitBytes() },
-    async (request, reply) => {
-    const { projectId } = request.params as { projectId: string };
-    const context = await requireProjectPermission(
-      request,
-      reply,
-      authStore,
-      projectId,
-      "update_project",
-    );
-    if (isProjectPermissionError(context)) return context;
-
-    const input = projectWorkspaceSaveRequestSchema.parse(request.body);
-    let result: Awaited<ReturnType<AuthStore["saveProjectWorkspace"]>>;
-    try {
-      const currentWorkspace = await authStore.getProjectWorkspace(projectId);
-      result = await authStore.saveProjectWorkspace({
-        projectId,
-        baseVersion: input.baseVersion,
-        // Ordinary workflow state is server-owned. Older clients cannot delete it or forge generated results.
-        state: normalizeWorkspaceModelState({ ...input.state, standardProject: currentWorkspace.state.standardProject }, currentWorkspace.state),
-        updatedByUserId: context.user.id,
-        sourceRunId: input.sourceRunId ?? null,
-      });
-    } catch (error) {
-      if (error instanceof ModelSemanticError) {
-        reply.code(400);
-        return createHttpErrorResponse(reply, { diagnostics: error.diagnostics });
-      }
-      if (isSchemaError(error)) {
-        reply.code(400);
-        return createHttpErrorResponse(reply, { issues: error.issues });
-      }
-      if (isWorkspaceSourceRunConstraintError(error)) {
-        reply.code(400);
-        return createHttpErrorResponse(reply);
-      }
-      throw error;
-    }
-    if (!result.ok) {
-      reply.code(409);
-      const current = projectWorkspacePayload(result.workspace);
-      return createHttpErrorResponse(reply, { projectId, currentVersion: current.version, workspace: current });
-    }
-
-    await authStore.recordAuditLog({
-      actorUserId: context.user.id,
-      action: "project.workspace.update",
-      targetType: "project",
-      targetId: projectId,
-      outcome: "success",
-      message: input.sourceRunId ? `sourceRunId=${input.sourceRunId}` : undefined,
-    });
-
-    return projectWorkspacePayload(result.workspace);
-    },
-  );
 
   app.patch("/api/projects/:projectId", async (request, reply) => {
     const { projectId } = request.params as { projectId: string };

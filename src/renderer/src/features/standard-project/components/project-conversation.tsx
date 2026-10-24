@@ -16,7 +16,7 @@ import { generationModelBlockedReason } from "../../../shared/lib/generation-mod
 import { loadUserSettings } from "../../../shared/lib/user-settings.js";
 import { requestProviderRequiredNotice } from "../../../shared/lib/provider-required-notice.js";
 import { floatingAlert } from "../../../shared/ui/floating-alert.js";
-import { ConversationCoding } from "./conversation-coding.js";
+import { ConversationCoding, ConversationDialogProvider } from "./conversation-coding.js";
 import { ConversationCodingContext, useConversationCoding } from "../hooks/use-conversation-coding.js";
 
 function DraftBinding({ projectId }: { projectId: string }) { useConversationDraft(projectId); return null; }
@@ -32,7 +32,7 @@ export function ProjectConversation({ projectId, state, disabled, canCancel, can
   const guardedSend: SendConversationCommand = async command => {
     if (disabled) return false;
     const current = loadUserSettings();
-    const reason = generationModelBlockedReason("provider", current);
+    const reason = generationModelBlockedReason(current);
     if (reason) {
       if (!current.providerConfigId || current.providerModelOptions.length === 0) requestProviderRequiredNotice();
       else floatingAlert.warning(reason);
@@ -49,8 +49,10 @@ export function ProjectConversation({ projectId, state, disabled, canCancel, can
         {/* The embedded theme maps body styles onto this root; let the host canvas show through. */}
         <div className="homepage-theme homepage-conversation flex min-h-0 min-w-0 flex-col" style={{ "--thread-max-width": "42rem", backgroundColor: "transparent", overflow: "hidden" } as CSSProperties}
           onChangeCapture={event => { if (event.target instanceof HTMLTextAreaElement && event.target.hasAttribute("data-composer-input")) saveConversationDraft(projectId, event.target.value); }}>
-          <ConversationCoding coding={coding} state={state} canEdit={canEdit} canCancel={canCancel} onCancel={onCancel} />
-          <div className="min-h-0 flex-1"><DraftBinding projectId={projectId} /><CommandInstructions /><Thread /></div>
+          <ConversationCoding coding={coding} state={state} canEdit={canEdit} canCancel={canCancel} onCancel={onCancel} inlineTools />
+          <ConversationDialogProvider coding={coding} state={state} canEdit={canEdit} canCancel={canCancel} onCancel={onCancel}>
+            <div className="min-h-0 flex-1"><DraftBinding projectId={projectId} /><CommandInstructions /><Thread /></div>
+          </ConversationDialogProvider>
         </div>
       </HomeDemoPortals>
     </HomeDemoEnvironment>

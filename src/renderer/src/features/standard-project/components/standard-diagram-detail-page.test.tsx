@@ -5,7 +5,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { standardModelFixture } from "../../../../../shared/contracts/testing/index.js";
 import type { StandardModel, StandardDiagram } from "../../../../../shared/contracts/index.js";
 import { withWorkspaceProviders } from "../../../../../../tests/renderer/helpers/workspace-test-utils.js";
-import { createMockWorkspaceRepository } from "../../../services/workspace-repository/index.js";
 import { downloadTextFile } from "../../../shared/lib/download.js";
 import { StandardDiagramDetailPage } from "./standard-diagram-detail-page.js";
 
@@ -21,7 +20,7 @@ const diagramFixture = (): StandardDiagram & { model: Extract<StandardModel, { d
 });
 const props = () => ({ diagram: diagramFixture(), disabled: false, canEdit: true, onSave: vi.fn(async () => true as boolean | undefined) });
 function mount(input = props()) {
-  return render(withWorkspaceProviders(<StandardDiagramDetailPage {...input} />, createMockWorkspaceRepository()));
+  return render(withWorkspaceProviders(<StandardDiagramDetailPage projectId="project" {...input} />));
 }
 beforeEach(() => vi.clearAllMocks());
 afterEach(() => vi.restoreAllMocks());
@@ -49,7 +48,7 @@ it.each(["light", "dark"])("preserves diagram content while zooming in the %s th
   const user = userEvent.setup();
   const input = props();
   input.diagram.svg = '<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" style="background:transparent"><path id="connector" d="M10 10L200 200" stroke="#181818"/><text fill="#000000">借阅关系</text></svg>';
-  render(withWorkspaceProviders(<div className={theme}><StandardDiagramDetailPage {...input} /></div>, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<div className={theme}><StandardDiagramDetailPage projectId="project" {...input} /></div>));
   const canvas = screen.getByTestId("svg-preview-canvas");
   const paper = canvas.querySelector(".uml-inline-svg");
   expect(paper).toHaveTextContent("借阅关系");
@@ -124,7 +123,7 @@ it("blocks structurally invalid deletion and rejects empty class names", async (
 it("keeps inspection available in read-only projects and guards edits when permissions change", async () => {
   const user = userEvent.setup(); const input = props(); const view = mount(input);
   await user.click(screen.getByRole("button", { name: "编辑类：图书" }));
-  view.rerender(withWorkspaceProviders(<StandardDiagramDetailPage {...input} canEdit={false} disabled />, createMockWorkspaceRepository()));
+  view.rerender(withWorkspaceProviders(<StandardDiagramDetailPage projectId="project" {...input} canEdit={false} disabled />));
   expect(screen.getByRole("button", { name: "确认编辑" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "确认编辑" }));
   expect(input.onSave).not.toHaveBeenCalled();

@@ -25,8 +25,14 @@ test("native read permits paginated Markdown resources and denies traversal, non
   for (const path of ["../outside/private.md", join(outside, "private.md"), "private.json", root]) {
     await assert.rejects(read(path), /只允许读取本轮启用/);
   }
-  await symlink(outside, join(root, "escape"), process.platform === "win32" ? "junction" : "dir");
-  await assert.rejects(read(join(root, "escape", "private.md")), /只允许读取本轮启用/);
+  await t.test("junction escape protection", async subtest => {
+    try { await symlink(outside, join(root, "escape"), process.platform === "win32" ? "junction" : "dir"); }
+    catch (error) {
+      if (["EPERM", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) return subtest.skip("当前测试沙箱不允许创建 junction");
+      throw error;
+    }
+    await assert.rejects(read(join(root, "escape", "private.md")), /只允许读取本轮启用/);
+  });
 });
 
 test("generation guidance uses the authored skill and only the task's reference", async () => {

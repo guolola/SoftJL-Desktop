@@ -40,7 +40,7 @@ const equal = (left: unknown, right: string) =>
   timingSafeEqual(Buffer.from(left), Buffer.from(right));
 export async function startDesktopBackend(options: DesktopBackendOptions) {
   await mkdir(options.dataDir, { recursive: true });
-  const storage = await openDatabase(join(options.dataDir, "database"));
+  const storage = await openDatabase(options.dataDir);
   const { db } = storage;
   const repository = createPostgresAuthRepository(db);
   const identity = (await db.query<{ id: string }>(

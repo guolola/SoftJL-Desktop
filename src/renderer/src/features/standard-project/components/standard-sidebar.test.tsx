@@ -4,7 +4,7 @@ import { i18n } from "../../../shared/i18n/index.js";
 import { render as renderUi, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
-import { standardDiagramKinds, standardDiagramLabels } from "../../../../../shared/contracts/index.js";
+import { standardDiagramKinds, standardDiagramLabels, type StandardDiagram, type StandardProjectState } from "../../../../../shared/contracts/index.js";
 import { SidebarProvider } from "../../../shared/ui/sidebar.js";
 import { StandardSidebar } from "./standard-sidebar.js";
 
@@ -84,6 +84,56 @@ it("uses the shared success and failure icons for generated tests and documents"
     onSelect={vi.fn()} onDiagram={vi.fn()} onNavigate={vi.fn()} /></SidebarProvider>);
   expect(screen.getByRole("button", { name: "测试" }).querySelector('[data-sidebar-status="completed"] svg')).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "说明书" }).querySelector('[data-sidebar-status="failed"] svg')).toBeInTheDocument();
+});
+
+it.each(["completed", "failed", "stopped"] as const)("defers this turn's attempt failure until the turn is %s, while retaining historical failures", async terminal => {
+  const user = userEvent.setup();
+  const diagrams: StandardDiagram[] = [
+    { id: "class", kind: "class", title: "类图", status: "failed", error: "首次校验失败" },
+    { id: "function", kind: "function", title: "功能结构图", status: "failed", error: "旧任务失败" },
+  ];
+  const run: NonNullable<StandardProjectState["run"]> = { id: "turn", operation: "chat", status: "running", startedAt: "now",
+    diagramIds: ["class"], work: { ids: ["another-diagram"] } };
+  const view = () => <SidebarProvider><StandardSidebar projectId="p" diagrams={diagrams} state={{ run }} view="home" selectedId={null}
+    onSelect={vi.fn()} onDiagram={vi.fn()} onNavigate={vi.fn()} /></SidebarProvider>;
+  const mounted = render(view());
+  await user.click(screen.getByRole("button", { name: "展开 UML 模型" }));
+  expect(screen.getByRole("button", { name: "设计类图" }).querySelector('[data-sidebar-status="running"]')).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "设计类图" }).querySelector('[data-sidebar-status="failed"]')).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "功能结构图" }).querySelector('[data-sidebar-status="failed"]')).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "UML 模型" }).querySelector('[data-sidebar-status="running"]')).toBeInTheDocument();
+  run.status = terminal;
+  mounted.rerender(view());
+  expect(screen.getByRole("button", { name: "设计类图" }).querySelector('[data-sidebar-status="failed"]')).toBeInTheDocument();
+});
+
+it("shows recovered success immediately and does not mask it with an earlier attempt failure", async () => {
+  const user = userEvent.setup();
+  const diagram: StandardDiagram = { id: "class", kind: "class", title: "类图", status: "failed" };
+  const view = () => <SidebarProvider><StandardSidebar projectId="p" diagrams={[diagram]} state={{ run: {
+    id: "turn", operation: "chat", status: "running", startedAt: "now", diagramIds: ["class"],
+  } }} view="home" selectedId={null} onSelect={vi.fn()} onDiagram={vi.fn()} onNavigate={vi.fn()} /></SidebarProvider>;
+  const mounted = render(view());
+  await user.click(screen.getByRole("button", { name: "展开 UML 模型" }));
+  expect(screen.getByRole("button", { name: "设计类图" }).querySelector('[data-sidebar-status="running"]')).toBeInTheDocument();
+  diagram.status = "completed";
+  mounted.rerender(view());
+  expect(screen.getByRole("button", { name: "设计类图" }).querySelector('[data-sidebar-status="completed"]')).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "设计类图" }).querySelector('[data-sidebar-status="failed"]')).not.toBeInTheDocument();
+});
+
+it.each(["pending", "running"] as const)("keeps a business category active while one child is %s and another has a final failure", async status => {
+  const user = userEvent.setup();
+  const diagrams: StandardDiagram[] = [
+    { id: "borrow", kind: "activity", title: "借阅流程", status: "failed" },
+    { id: "return", kind: "activity", title: "归还流程", status },
+  ];
+  render(<SidebarProvider><StandardSidebar projectId="p" diagrams={diagrams} view="home" selectedId={null}
+    onSelect={vi.fn()} onDiagram={vi.fn()} onNavigate={vi.fn()} /></SidebarProvider>);
+  await user.click(screen.getByRole("button", { name: "展开 UML 模型" }));
+  expect(screen.getByRole("button", { name: "业务流程图" }).querySelector(`[data-sidebar-status="${status === "pending" ? "queued" : "running"}"]`)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "业务流程图" }));
+  expect(screen.getByRole("button", { name: "借阅流程" }).querySelector('[data-sidebar-status="failed"]')).toBeInTheDocument();
 });
 
 it.each([true, false])("opens the overall usecase directly through its current singleton identity (expanded sidebar: %s)", async expanded => {

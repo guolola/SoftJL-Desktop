@@ -9,11 +9,13 @@ import { ToolTimeline } from "./elements/tool-timeline.js";
 import { useHomeDemo } from "./environment.js";
 import { TerminalBlock } from "../../../../../shared/assistant-ui/elements/terminal-block.js";
 import { ConversationCodingContext } from "../../../hooks/use-conversation-coding.js";
+import { isPermissionDialog } from "../../../lib/conversation-dialog-presentation.js";
 
 const labels: Record<string, [string, string]> = {
   read_resource: ["读取建模规范", "Read modeling guidance"],
   read: ["读取文件", "Read file"], write: ["写入文件", "Write file"], edit: ["编辑文件", "Edit file"],
   powershell: ["运行命令", "Run command"], ls: ["浏览目录", "List directory"],
+  select_code_directory: ["选择代码保存文件夹", "Choose code folder"],
   web_search: ["搜索网页", "Search web"], fetch_content: ["读取网页", "Fetch content"],
   ask_user_question: ["询问用户", "Ask user"], subagent: ["子代理", "Subagent"], get_subagent_result: ["子代理结果", "Subagent result"], steer_subagent: ["引导子代理", "Steer subagent"],
   read_project: ["读取项目", "Read project"], read_diagram: ["读取图表", "Read diagrams"],
@@ -37,10 +39,11 @@ export function useToolPresentation() {
   // The question tool finishes when it publishes the form; the business workflow still waits for an answer.
   const waiting = !!latest?.questions.length && !latest.answers.length && owner === messageId;
   return { text, present: (part: Pick<ToolCallMessagePartProps, "toolCallId" | "toolName" | "status" | "isError" | "result" | "args">) => {
-    const approval = coding?.approvals.some(item => item.toolCallId === part.toolCallId && item.runId === state.run?.id);
-    const running = part.status.type === "running" && !approval;
+    const prompt = state.run?.status === "running" ? coding?.approvals.find(item => item.toolCallId === part.toolCallId && item.runId === state.run?.id) : undefined;
+    const approval = prompt && isPermissionDialog(prompt);
+    const running = part.status.type === "running" && !prompt;
     const failed = !!part.isError || part.status.type === "incomplete";
-    const awaiting = !!approval || (!running && !failed && part.toolName === "confirm_generation_scope" && waiting);
+    const awaiting = !!prompt || (!running && !failed && part.toolName === "confirm_generation_scope" && waiting);
     const execution: { output: string; directory?: string; exitCode?: number; durationMs?: number; truncated?: boolean } | undefined = part.result && typeof part.result === "object" && "output" in part.result ? part.result as { output: string; directory?: string; exitCode?: number; durationMs?: number; truncated?: boolean }
       : typeof part.args.liveOutput === "string" ? { output: part.args.liveOutput } : undefined;
     return {

@@ -21,7 +21,6 @@ import type { RunRecordStore } from "./runs/records/run-record-store.js";
 import type { RenderClient } from "./adapters/render/render-client.js";
 import type { PngRenderClient } from "./adapters/render/png-render-client.js";
 import type { PdfRenderClient } from "./adapters/render/pdf-render-client.js";
-import { createBullMqRunQueue, createRunQueueConfigFromEnv, type RunQueue, } from "./runs/queue/run-queue.js";
 export async function createApiServer(options?: {
     codingHost?: ConversationCodingHost;
     agentResources?: StandardAgentResourceProvider;
@@ -38,7 +37,6 @@ export async function createApiServer(options?: {
     testRunAccessContext?: RunAccessContext;
     nodeEnv?: string | null;
     systemNoticeStore?: SystemNoticeStore;
-    runQueue?: RunQueue;
 }) {
     const runtimeNodeEnv = options?.nodeEnv ?? process.env.NODE_ENV ?? null;
     // Test-only fallback used by API integration tests that construct run records
@@ -66,16 +64,6 @@ export async function createApiServer(options?: {
     if (pool) {
         app.addHook("onClose", async () => {
             await pool.end();
-        });
-    }
-    const runQueue = options?.runQueue ??
-        (() => {
-            const config = createRunQueueConfigFromEnv();
-            return config ? createBullMqRunQueue(config) : undefined;
-        })();
-    if (runQueue) {
-        app.addHook("onClose", async () => {
-            await runQueue.close();
         });
     }
     const generationUsage = createGenerationUsageService({ providerUsageTracker });
@@ -119,7 +107,6 @@ export async function createApiServer(options?: {
         providerConfigs,
         providerUsageTracker,
         llmScheduler,
-        runQueue,
         llmTransport,
         renderClient,
         pngRenderClient,

@@ -1,4 +1,4 @@
-// Coordinates single-server LLM concurrency so model-level parallelism cannot overload the API process.
+// Tracks local LLM requests and streaming telemetry without desktop concurrency limits.
 import type { RunStage } from "../../../../shared/contracts/index.js";
 import type {
   ChatCompletionResponseFormat,
@@ -38,14 +38,6 @@ export interface LlmScheduleStatus {
   queueReason?: LlmQueueReason;
 }
 
-export interface LlmSchedulerLimits {
-  globalConcurrency: number;
-  providerConcurrency: number;
-  projectConcurrency: number;
-  userConcurrency: number;
-  runConcurrency: number;
-}
-
 export interface LlmScheduler {
   run<T>(
     context: LlmScheduleContext,
@@ -64,221 +56,24 @@ export interface LlmScheduler {
   };
 }
 
-type QueueItem<T> = {
-  id: number;
-  context: LlmScheduleContext;
-  createdAt: number;
-  task: () => Promise<T>;
-  onStatus?: (status: LlmScheduleStatus) => void;
-  resolve: (value: T) => void;
-  reject: (error: Error) => void;
-  cancelled: boolean;
-};
-
-const DEFAULT_LIMITS: LlmSchedulerLimits = {
-  globalConcurrency: 4,
-  providerConcurrency: 4,
-  projectConcurrency: 2,
-  userConcurrency: 2,
-  runConcurrency: 2,
-};
-
-function positiveInteger(value: number, fallback: number) {
-  return Number.isInteger(value) && value > 0 ? value : fallback;
-}
-
-function key(value: string | null | undefined, fallback: string) {
-  const normalized = value?.trim();
-  return normalized ? normalized : fallback;
-}
-
-function increment(map: Map<string, number>, keyValue: string) {
-  map.set(keyValue, (map.get(keyValue) ?? 0) + 1);
-}
-
-function decrement(map: Map<string, number>, keyValue: string) {
-  const next = (map.get(keyValue) ?? 0) - 1;
-  if (next > 0) {
-    map.set(keyValue, next);
-  } else {
-    map.delete(keyValue);
-  }
-}
-
-export function createLlmSchedulerLimitsFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
-): LlmSchedulerLimits {
-  return {
-    globalConcurrency: positiveInteger(
-      Number(env.UML_LLM_GLOBAL_CONCURRENCY),
-      DEFAULT_LIMITS.globalConcurrency,
-    ),
-    providerConcurrency: positiveInteger(
-      Number(env.UML_LLM_PROVIDER_CONCURRENCY),
-      DEFAULT_LIMITS.providerConcurrency,
-    ),
-    projectConcurrency: positiveInteger(
-      Number(env.UML_LLM_PROJECT_CONCURRENCY),
-      DEFAULT_LIMITS.projectConcurrency,
-    ),
-    userConcurrency: positiveInteger(
-      Number(env.UML_LLM_USER_CONCURRENCY),
-      DEFAULT_LIMITS.userConcurrency,
-    ),
-    runConcurrency: positiveInteger(
-      Number(env.UML_LLM_RUN_CONCURRENCY),
-      DEFAULT_LIMITS.runConcurrency,
-    ),
-  };
-}
-
-export function createInMemoryLlmScheduler(
-  limits: Partial<LlmSchedulerLimits> = {},
-): LlmScheduler {
-  const resolvedLimits = {
-    ...DEFAULT_LIMITS,
-    ...limits,
-  };
-  let nextId = 0;
+export function createInMemoryLlmScheduler(): LlmScheduler {
   let running = 0;
-  const queue: Array<QueueItem<unknown>> = [];
-  const runningByProvider = new Map<string, number>();
-  const runningByProject = new Map<string, number>();
-  const runningByUser = new Map<string, number>();
-  const runningByRun = new Map<string, number>();
-  const recentDurations: number[] = [];
 
-  const providerKey = (context: LlmScheduleContext) =>
-    key(context.providerConfigId, `${context.model}:default-provider`);
-  const projectKey = (context: LlmScheduleContext) =>
-    key(context.projectId, "anonymous-project");
-  const userKey = (context: LlmScheduleContext) =>
-    key(context.userId, "anonymous-user");
-
-  function averageDurationMs() {
-    if (recentDurations.length === 0) return undefined;
-    return Math.round(
-      recentDurations.reduce((sum, duration) => sum + duration, 0) /
-        recentDurations.length,
-    );
-  }
-
-  function blockedReason(context: LlmScheduleContext): LlmQueueReason | null {
-    if (running >= resolvedLimits.globalConcurrency) return "global";
-    if ((runningByProvider.get(providerKey(context)) ?? 0) >= resolvedLimits.providerConcurrency) {
-      return "provider";
-    }
-    if ((runningByProject.get(projectKey(context)) ?? 0) >= resolvedLimits.projectConcurrency) {
-      return "project";
-    }
-    if ((runningByUser.get(userKey(context)) ?? 0) >= resolvedLimits.userConcurrency) {
-      return "user";
-    }
-    if ((runningByRun.get(context.runId) ?? 0) >= resolvedLimits.runConcurrency) {
-      return "run";
-    }
-    return null;
-  }
-
-  function queueStatus(item: QueueItem<unknown>): LlmScheduleStatus {
-    const queueIndex = queue.indexOf(item);
-    const queueAhead = Math.max(queueIndex, 0);
-    const average = averageDurationMs();
-    return {
-      status: "queued",
-      queuePosition: queueAhead + 1,
-      queueAhead,
-      waitMs: Date.now() - item.createdAt,
-      estimatedWaitMs: average ? average * (queueAhead + 1) : undefined,
-      queueReason: blockedReason(item.context) ?? "global",
-    };
-  }
-
-  function publishQueueStatuses() {
-    for (const item of queue) {
-      item.onStatus?.(queueStatus(item));
-    }
-  }
-
-  function reserve(context: LlmScheduleContext) {
-    running += 1;
-    increment(runningByProvider, providerKey(context));
-    increment(runningByProject, projectKey(context));
-    increment(runningByUser, userKey(context));
-    increment(runningByRun, context.runId);
-  }
-
-  function release(context: LlmScheduleContext, startedAt: number) {
-    running -= 1;
-    decrement(runningByProvider, providerKey(context));
-    decrement(runningByProject, projectKey(context));
-    decrement(runningByUser, userKey(context));
-    decrement(runningByRun, context.runId);
-    recentDurations.push(Date.now() - startedAt);
-    if (recentDurations.length > 20) recentDurations.shift();
-    drain();
-  }
-
-  function start(item: QueueItem<unknown>) {
-    reserve(item.context);
-    const startedAt = Date.now();
-    item.onStatus?.({
-      status: "running",
-      waitMs: startedAt - item.createdAt,
-    });
-    void item
-      .task()
-      .then((value) => {
-        item.onStatus?.({ status: "completed" });
-        item.resolve(value);
-      })
-      .catch((error: unknown) => {
-        item.reject(error instanceof Error ? error : new Error(String(error)));
-      })
-      .finally(() => {
-        release(item.context, startedAt);
-      });
-  }
-
-  function drain() {
-    for (let index = 0; index < queue.length;) {
-      const item = queue[index]!;
-      if (item.cancelled) {
-        queue.splice(index, 1);
-        item.onStatus?.({ status: "cancelled" });
-        item.reject(new Error("LLM scheduler task cancelled"));
-        continue;
-      }
-      if (blockedReason(item.context)) {
-        index += 1;
-        continue;
-      }
-      queue.splice(index, 1);
-      start(item);
-    }
-    publishQueueStatuses();
-  }
-
-  function run<T>(
-    context: LlmScheduleContext,
+  async function run<T>(
+    _context: LlmScheduleContext,
     task: () => Promise<T>,
     onStatus?: (status: LlmScheduleStatus) => void,
-  ) {
-    return new Promise<T>((resolve, reject) => {
-      const item: QueueItem<T> = {
-        id: nextId++,
-        context,
-        createdAt: Date.now(),
-        task,
-        onStatus,
-        resolve,
-        reject,
-        cancelled: false,
-      };
-      queue.push(item as QueueItem<unknown>);
-      onStatus?.(queueStatus(item as QueueItem<unknown>));
-      drain();
-    });
+  ): Promise<T> {
+    // Desktop requests start immediately; keep lifecycle callbacks for usage telemetry.
+    running += 1;
+    try {
+      onStatus?.({ status: "running", waitMs: 0 });
+      const value = await task();
+      onStatus?.({ status: "completed" });
+      return value;
+    } finally {
+      running -= 1;
+    }
   }
 
   return {
@@ -289,8 +84,8 @@ export function createInMemoryLlmScheduler(
       const spaceWaiters: Array<() => void> = [];
       let done = false;
       let failure: Error | null = null;
-      // Keep provider streaming coupled to downstream SSE/event persistence so one
-      // run cannot finish buffering thousands of chunks and release the slot early.
+      // Keep provider streaming coupled to downstream SSE/event persistence
+      // so slow consumers cannot buffer an unbounded number of chunks.
       const maxBufferedChunks = 1;
       const wake = () => {
         while (waiters.length > 0) waiters.shift()?.();
@@ -338,16 +133,13 @@ export function createInMemoryLlmScheduler(
       await pump;
       if (failure) throw failure;
     },
-    cancelRun(runId) {
-      for (const item of queue) {
-        if (item.context.runId === runId) item.cancelled = true;
-      }
-      drain();
+    cancelRun(_runId) {
+      // There is no local queue; callers abort active requests through their AbortController.
     },
     snapshot() {
       return {
         running,
-        queued: queue.filter((item) => !item.cancelled).length,
+        queued: 0,
       };
     },
   };

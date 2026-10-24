@@ -1,5 +1,6 @@
 // Keeps the conversation anchored during disclosure animations without changing scrollbar geometry.
 import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { isViewportAtBottom } from "@assistant-ui/store/client";
 
 export function useDisclosureScrollLock(
   animatedElementRef: RefObject<HTMLElement | null>,
@@ -20,6 +21,9 @@ export function useDisclosureScrollLock(
     if (!viewport) return;
 
     const scrollContainer = viewport;
+    // At the bottom, let the thread follow output and disclosure size changes.
+    // Only hold the position when the reader has scrolled back into history.
+    if (isViewportAtBottom(scrollContainer)) return;
     const scrollTop = scrollContainer.scrollTop;
     const resetPosition = () => {
       if (scrollContainer.scrollTop !== scrollTop) scrollContainer.scrollTop = scrollTop;

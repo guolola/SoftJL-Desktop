@@ -8,7 +8,7 @@ export const mcpConfigSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("stdio"), command: z.string().trim().min(1).max(1000), args: z.array(z.string().max(4000)).max(100), cwd: z.string().max(2000).optional(), env: values.optional() }).strict(),
   z.object({ type: z.literal("http"), url: z.string().url().refine(value => ["http:", "https:"].includes(new URL(value).protocol)), headers: values.optional() }).strict(),
 ]);
-export const mcpSaveSchema = z.object({ name: z.string().trim().min(1).max(100), description: z.string().max(1000), enabled: z.boolean(), exposure: mcpExposureSchema, config: mcpConfigSchema }).strict();
+export const mcpSaveSchema = z.object({ name: z.string().trim().min(1).max(100), description: z.string().max(1000), enabled: z.boolean(), exposure: mcpExposureSchema.default("direct"), config: mcpConfigSchema }).strict();
 export const skillSaveSchema = z.object({ name: integrationIdSchema, description: z.string().trim().min(1).max(1000), content: z.string().trim().min(1).max(48000), enabled: z.boolean() }).strict();
 export type McpConfig = z.infer<typeof mcpConfigSchema>;
 export type McpSave = z.infer<typeof mcpSaveSchema>;

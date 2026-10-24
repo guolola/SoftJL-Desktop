@@ -71,11 +71,10 @@ describe("ProjectCreateForm", () => {
     await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(true));
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     const payload = JSON.parse(String(call?.[1]?.body));
-    expect(payload).toMatchObject({ name: "订单系统", description: "订单管理", projectMode: "standard" });
+    expect(payload).toMatchObject({ name: "订单系统", description: "订单管理", });
     expect(PROJECT_BACKGROUND_OPTIONS.map(({ key }) => key)).toContain(payload.backgroundKey);
-    expect(consumeProjectIntroduction("project-created", "standard")).toBe(true);
-    expect(consumeProjectIntroduction("project-created", "standard")).toBe(false);
-    expect(consumeProjectIntroduction("project-created", "professional")).toBe(false);
+    expect(consumeProjectIntroduction("project-created")).toBe(true);
+    expect(consumeProjectIntroduction("project-created")).toBe(false);
   });
 
   it("creates personal local projects without invitations or hierarchy settings", async () => {
@@ -91,6 +90,9 @@ describe("ProjectCreateForm", () => {
     const call = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     const payload = JSON.parse(String(call?.[1]?.body));
     expect(payload).not.toHaveProperty("visibility");
+    expect(payload).not.toHaveProperty("projectMode");
+    expect(screen.queryByText("工程建模")).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
     for (const field of ["organizationId", "courseId", "classId", "teamId"]) {
       expect(payload).not.toHaveProperty(field);
     }
@@ -114,41 +116,12 @@ describe("ProjectCreateForm", () => {
     expect(screen.getByRole("button", { name: "创建并进入项目" })).toBeDisabled();
     fireEvent.submit(form);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(consumeProjectIntroduction("project-created", "standard")).toBe(false);
+    expect(consumeProjectIntroduction("project-created")).toBe(false);
     finishCreation(new Response(JSON.stringify({ project: {
-      id: "project-created", projectMode: "standard", name: "订单系统", description: null,
+      id: "project-created", name: "订单系统", description: null,
       status: "active", ownerUserId: "owner-user", updatedAt: "2026-06-21T00:00:00.000Z",
     } }), { status: 201, headers: { "Content-Type": "application/json" } }));
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
-  });
-
-  it("lets the creator explicitly select professional mode", async () => {
-    const user = userEvent.setup(); const fetchMock = stubCreateProjectFetch();
-    render(<ProjectCreateForm onNavigate={() => {}} />);
-    await user.type(screen.getByLabelText("项目名称"), "订单系统");
-    expect(screen.getByLabelText("项目名称")).toHaveValue("订单系统");
-    expect(screen.getByRole("radio", { name: "快速建模" })).toBeChecked();
-    const quickCard = screen.getByRole("radio", { name: "快速建模" }).closest("label")!;
-    const engineeringCard = screen.getByRole("radio", { name: "工程建模" }).closest("label")!;
-    expect(quickCard.querySelector('[data-slot="badge"]')).toHaveTextContent("快速建模");
-    expect(engineeringCard.querySelector('[data-slot="badge"]')).toHaveTextContent("工程建模");
-    expect(screen.getByRole("radio", { name: "快速建模" })).toHaveAccessibleDescription("适合初学者和希望快速验证想法的用户。通过对话灵活建模，不进行链路校验。");
-    expect(screen.getByRole("radio", { name: "工程建模" })).toHaveAccessibleDescription("适合开展课程设计或工程实践的学生与团队。按规范流程分步建模，校验链路并追踪变更影响，过程更严谨。");
-    expect(quickCard.querySelector('[data-project-mode-illustration="chat"]')).toHaveAttribute("aria-hidden", "true");
-    expect(engineeringCard.querySelector('[data-project-mode-illustration="beam"]')).toHaveAttribute("aria-hidden", "true");
-    // Decorative chat actions must not add form controls inside the mode's label.
-    expect(quickCard.querySelectorAll("button, input")).toHaveLength(1);
-    expect(engineeringCard.querySelectorAll("button, input")).toHaveLength(1);
-    expect(screen.getByText("聊天式")).toBeVisible();
-    expect(screen.getByText("工作流式")).toBeVisible();
-    await user.click(screen.getByText("工程建模", { selector: '[data-slot="badge"]' }));
-    expect(screen.getByRole("radio", { name: "工程建模" })).toBeChecked();
-    await user.click(screen.getByRole("button", { name: "创建并进入项目" }));
-    const call = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
-    expect(JSON.parse(String(call?.[1]?.body)).projectMode).toBe("professional");
-    await waitFor(() => expect(toast.success).toHaveBeenCalled());
-    expect(consumeProjectIntroduction("project-created", "standard")).toBe(false);
-    expect(consumeProjectIntroduction("project-created", "professional")).toBe(true);
   });
 
   it("does not queue an introduction when project creation fails", async () => {
@@ -161,27 +134,7 @@ describe("ProjectCreateForm", () => {
     await user.type(screen.getByLabelText("项目名称"), "失败的项目");
     await user.click(screen.getByRole("button", { name: "创建并进入项目" }));
     await waitFor(() => expect(toast.error).toHaveBeenCalled());
-    expect(consumeProjectIntroduction("project-created", "standard")).toBe(false);
-  });
-
-  it("shows every field together and preserves mode and details while editing", async () => {
-    const user = userEvent.setup();
-    stubCreateProjectFetch();
-    render(<ProjectCreateForm onNavigate={() => {}} />);
-    expect(screen.getByLabelText("项目名称")).toBeVisible();
-    expect(screen.getByLabelText("项目描述")).toBeVisible();
-    expect(screen.getByRole("radio", { name: "快速建模" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "工程建模" })).toBeVisible();
-    expect(screen.queryByRole("list", { name: "创建项目步骤" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "下一步" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "上一步" })).not.toBeInTheDocument();
-    await user.type(screen.getByLabelText("项目名称"), "订单系统");
-    screen.getByRole("radio", { name: "快速建模" }).focus();
-    await user.keyboard("{ArrowRight}");
-    expect(screen.getByRole("radio", { name: "工程建模" })).toBeChecked();
-    await user.type(screen.getByLabelText("项目描述"), "订单管理");
-    expect(screen.getByLabelText("项目名称")).toHaveValue("订单系统");
-    expect(screen.getByRole("radio", { name: "工程建模" })).toBeChecked();
+    expect(consumeProjectIntroduction("project-created")).toBe(false);
   });
 
   it("shows a success toast before navigating to the created project", async () => {

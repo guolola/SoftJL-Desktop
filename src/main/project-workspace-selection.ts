@@ -3,6 +3,7 @@ import { dialog, ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "el
 import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative } from "node:path";
+import { conversationDirectoryRequestSchema, type ConversationDirectoryRequest } from "../shared/contracts/workspace/conversation-coding.js";
 
 export function installProjectWorkspaceSelection(options: { window: BrowserWindow; trusted: (event: IpcMainInvokeEvent) => void; origin: string; capability: string; directorySelectionCapability: string; dataDir: string }) {
   const grants = new Map<string, { directory: string; expiresAt: number }>();
@@ -19,9 +20,9 @@ export function installProjectWorkspaceSelection(options: { window: BrowserWindo
     if (dirname(directory) === directory || inside(directory, data) || inside(data, directory)) throw new Error("请选择具体项目文件夹，不能选择磁盘根目录或应用数据目录");
     return directory;
   };
-  const assign = async (projectId: string, directory: string) => {
+  const assign = async (projectId: string, directory: string, request?: ConversationDirectoryRequest) => {
     const response = await fetch(`${options.origin}/api/desktop/projects/${encodeURIComponent(projectId)}/conversation-code`, {
-      method: "POST", headers: { "Content-Type": "application/json", "x-softjl-desktop": options.capability, "x-softjl-directory-selection": options.directorySelectionCapability }, body: JSON.stringify({ directory }),
+      method: "POST", headers: { "Content-Type": "application/json", "x-softjl-desktop": options.capability, "x-softjl-directory-selection": options.directorySelectionCapability }, body: JSON.stringify({ directory, request }),
     });
     const result = await response.json() as { directory?: string; message?: string };
     if (!response.ok || !result.directory) throw new Error(result.message ?? "保存项目工作区失败");
@@ -46,9 +47,10 @@ export function installProjectWorkspaceSelection(options: { window: BrowserWindo
     try { return await assign(id, grant.directory); }
     catch (error) { if (grant.expiresAt >= Date.now()) grants.set(selectionId as string, grant); throw error; }
   });
-  ipcMain.handle("desktop:conversation:select-directory", async (event, projectId: unknown) => {
+  ipcMain.handle("desktop:conversation:select-directory", async (event, projectId: unknown, input: unknown) => {
     options.trusted(event); const id = validateId(projectId);
+    const request = input === undefined ? undefined : conversationDirectoryRequestSchema.parse(input);
     const directory = await pick();
-    return directory ? assign(id, directory) : null;
+    return directory ? assign(id, directory, request) : null;
   });
 }

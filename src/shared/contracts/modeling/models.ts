@@ -1,10 +1,10 @@
 // UML model, test generation, PlantUML, SVG, and design traceability contract schemas.
 import { z } from "zod";
 import {
-  designDiagramKindSchema,
-  diagramKindSchema,
-  umlDiagramKindSchema,
-  type DesignDiagramKind,
+designDiagramKindSchema,
+diagramKindSchema,
+umlDiagramKindSchema,
+type DesignDiagramKind,
 } from "../requirements/requirements.js";
 
 export const visibilitySchema = z.enum(["public", "protected", "private", "package"]);
@@ -395,15 +395,6 @@ export const activityDiagramSpecSchema = z.object({
   relationships: z.array(activityRelationshipSchema),
 });
 export type ActivityDiagramSpec = z.infer<typeof activityDiagramSpecSchema>;
-
-// Feasibility uses a high-level control-flow subset, not the full activity profile.
-export const feasibilityActivityDiagramSpecSchema = activityDiagramSpecSchema.extend({
-  nodes: z.array(z.discriminatedUnion("type", [activityStartNodeSchema, activityEndNodeSchema,
-    activityActionNodeSchema.extend({ inputPins: z.array(activityPinSchema).max(0).optional(), outputPins: z.array(activityPinSchema).max(0).optional() }),
-    activityDecisionNodeSchema, activityMergeNodeSchema, activityForkNodeSchema, activityJoinNodeSchema])),
-  relationships: z.array(activityRelationshipSchema.extend({ type: z.literal("control_flow") })),
-});
-
 
 export const deploymentNodeTypeSchema = z.enum([
   "node",
@@ -924,34 +915,6 @@ export const modelElementRefSchema = z.object({
 });
 export type ModelElementRef = z.infer<typeof modelElementRefSchema>;
 
-export const requirementModelTraceabilityEntrySchema = z.object({
-  ruleId: z.string().min(1),
-  target: modelElementRefSchema,
-  mappingSource: z.enum(["llm"]).optional(),
-  rationale: z.string().min(1).optional(),
-}).strict();
-export type RequirementModelTraceabilityEntry = z.infer<
-  typeof requirementModelTraceabilityEntrySchema
->;
-
-export const designModelTraceabilityEntrySchema = z.object({
-  source: modelElementRefSchema,
-  targets: z.array(modelElementRefSchema).min(1),
-  upstreamDesignRefs: z.array(modelElementRefSchema).optional(),
-  mappingSource: z
-    .enum(["llm", "derived-from-endpoints"])
-    .optional(),
-  rationale: z.string().min(1).optional(),
-}).strict();
-export type DesignModelTraceabilityEntry = z.infer<
-  typeof designModelTraceabilityEntrySchema
->;
-
-export const diagramModelsResultSchema = z.object({
-  models: z.array(diagramModelSpecSchema),
-  requirementModelTraceability: z.array(requirementModelTraceabilityEntrySchema),
-});
-export type DiagramModelsResult = z.infer<typeof diagramModelsResultSchema>;
 
 export const designDiagramModelSpecSchema = z.discriminatedUnion("diagramKind", [
   architectureDiagramSpecSchema,
@@ -964,11 +927,6 @@ export const designDiagramModelSpecSchema = z.discriminatedUnion("diagramKind", 
 ]);
 export type DesignDiagramModelSpec = z.infer<typeof designDiagramModelSpecSchema>;
 
-export const designDiagramModelsResultSchema = z.object({
-  models: z.array(designDiagramModelSpecSchema),
-  designModelTraceability: z.array(designModelTraceabilityEntrySchema),
-});
-export type DesignDiagramModelsResult = z.infer<typeof designDiagramModelsResultSchema>;
 
 export const testScenarioTypeSchema = z.enum([
   "normal",
@@ -1111,29 +1069,4 @@ export function designRecordBelongsToDiagramKinds(
   const modelId = designRecordStringField(record, "modelId");
   const modelIdKind = designDiagramKindFromRecordKey(modelId);
   return Boolean(modelIdKind && affected.has(modelIdKind));
-}
-
-export function designTraceabilityTouchesDiagramKinds(
-  entry: DesignModelTraceabilityEntry,
-  diagramKinds: Iterable<DesignDiagramKind>,
-  deletedModelIds: Iterable<string> = [],
-) {
-  const affected = new Set(diagramKinds);
-  const deletedIds = new Set(deletedModelIds);
-  if (affected.size === 0 && deletedIds.size === 0) return false;
-  const touchesRef = (ref: ModelElementRef) => {
-    const modelId = ref.modelId ?? "";
-    const modelKind = designDiagramKindFromRecordKey(modelId);
-    if (modelId && deletedIds.has(modelId)) return true;
-    if (ref.elementId && deletedIds.has(ref.elementId)) return true;
-    if (isDesignDiagramKind(ref.diagramKind) && affected.has(ref.diagramKind)) {
-      return true;
-    }
-    return Boolean(modelKind && affected.has(modelKind));
-  };
-  return (
-    touchesRef(entry.source) ||
-    entry.targets.some(touchesRef) ||
-    (entry.upstreamDesignRefs ?? []).some(touchesRef)
-  );
 }

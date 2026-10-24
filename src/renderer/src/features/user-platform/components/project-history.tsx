@@ -1,44 +1,42 @@
 // Displays business operation history with snapshot inspection and record deletion.
-import { Card } from "../../../shared/ui/card.js";
-import { useEffect, useMemo, useState } from "react";
+import { Eye,RefreshCw,Trash2 } from "lucide-react";
+import { useEffect,useMemo,useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Eye, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import {
+localizeCaughtFailure,
+} from "../../../shared/i18n/api-errors.js";
+import { useAppI18n } from "../../../shared/i18n/i18n-provider.js";
+import { TablePagination,TableToolbar } from "../../../shared/template/layout/page.js";
 import { Badge } from "../../../shared/ui/badge.js";
 import { Button } from "../../../shared/ui/button.js";
+import { Card } from "../../../shared/ui/card.js";
+import { useFloatingAlert } from "../../../shared/ui/floating-alert.js";
 import { SelectControl } from "../../../shared/ui/select.js";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
+Table,
+TableBody,
+TableCell,
+TableHead,
+TableHeader,
+TableRow,
 } from "../../../shared/ui/table.js";
-import { TablePagination, TableToolbar } from "../../../shared/template/layout/page.js";
-import { useWorkspaceSession } from "../../workspace-session/state.js";
+import { HISTORY_OPERATIONS,getHistoryOperation } from "../lib/project-history-details.js";
 import {
-  formatDateTime,
-  getProjectRunDisplayTime,
-  getProjectRunModelLabel,
-  getProjectRunOperatorLabel,
-  getProjectRunOperatorSearchText,
-  getProjectRunStatusClasses,
-  getProjectRunStatusLabel,
+formatDateTime,
+getProjectRunDisplayTime,
+getProjectRunModelLabel,
+getProjectRunOperatorLabel,
+getProjectRunOperatorSearchText,
+getProjectRunStatusClasses,
+getProjectRunStatusLabel,
 } from "../lib/project-workspace-presentation.js";
-import {
-  platformApi,
-  type PlatformProjectMember,
-  type PlatformRunSummary,
-} from "../services/platform-api.js";
-import { useAppI18n } from "../../../shared/i18n/i18n-provider.js";
-import {
-  localizeCaughtFailure,
-} from "../../../shared/i18n/api-errors.js";
-import { useFloatingAlert } from "../../../shared/ui/floating-alert.js";
-import { getHistoryOperation, hasHistoryRetryFailure, HISTORY_OPERATIONS } from "../lib/project-history-details.js";
-import { ProjectRunDetailDialog } from "./project-run-detail-dialog.js";
-import { ProjectRunRetryDialog } from "./project-run-retry-dialog.js";
 import { runTokenConsumptionPresentation } from "../lib/run-token-consumption.js";
+import {
+platformApi,
+type PlatformProjectMember,
+type PlatformRunSummary,
+} from "../services/platform-api.js";
+import { ProjectRunDetailDialog } from "./project-run-detail-dialog.js";
 
 export function ProjectHistory({
   projectId,
@@ -59,12 +57,10 @@ export function ProjectHistory({
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchFilter, setSearchFilter] = useState("");
   const [selectedRunId, setSelectedRunId] = useState("");
-  const [retryRun, setRetryRun] = useState<PlatformRunSummary | null>(null);
   const [deletingRunIds, setDeletingRunIds] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const { deleteRunHistory, canStartRuns } = useWorkspaceSession();
 
   useEffect(() => {
     setRuns(initialRuns);
@@ -96,7 +92,6 @@ export function ProjectHistory({
     setDeletingRunIds((current) => [...current, runId]);
     try {
       await platformApi.deleteProjectRun(projectId, runId);
-      await deleteRunHistory(runId).catch(() => []);
       setRuns((current) => current.filter((run) => run.runId !== runId));
       notifySuccess(t("projectShell.historyUi.deleted"));
     } catch (deleteError) {
@@ -155,11 +150,6 @@ export function ProjectHistory({
           aria-label={t("projectShell.historyUi.viewAria", { id: run.runId })}
           title={t("projectShell.historyUi.view")}
           onClick={() => setSelectedRunId(run.runId)}><Eye className="size-3.5" /></Button>
-        {hasHistoryRetryFailure(run) && <Button type="button" variant="outline" size="sm" className="h-7 px-1 md:h-8 md:px-2"
-          aria-label={t("projectShell.historyUi.retryAria", { id: run.runId })}
-          title={t("projectShell.historyUi.retry")}
-          disabled={!canStartRuns || deletingRunIds.includes(run.runId)}
-          onClick={() => { if (canStartRuns && hasHistoryRetryFailure(run)) setRetryRun(run); }}><RotateCcw className="size-3.5" /></Button>}
         <Button type="button" variant="destructive" size="sm" className="h-7 px-1 md:h-8 md:px-2"
           aria-label={t("projectShell.historyUi.deleteAria", { id: run.runId })}
           title={running ? t("projectShell.historyUi.deleteBlocked") : t("projectShell.historyUi.delete")}
@@ -342,12 +332,7 @@ export function ProjectHistory({
     <div className="grid min-w-0 gap-4" data-layout={layout}>
       {runTable}
       {selectedRun && <ProjectRunDetailDialog key={`${projectId}:${selectedRun.runId}`} projectId={projectId} run={selectedRun} onClose={() => setSelectedRunId("")} />}
-      {retryRun && <ProjectRunRetryDialog key={`${projectId}:${retryRun.runId}`} projectId={projectId} run={retryRun} canStartRuns={canStartRuns}
-        onClose={() => setRetryRun(null)} onRetried={() => {
-          setRetryRun(null);
-          notifySuccess(t("projectShell.historyUi.retryStarted"));
-          void refreshRuns(false);
-        }} />}
+
     </div>
   );
 }

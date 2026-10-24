@@ -8,6 +8,7 @@ import { IntegrationStore } from "./integration-store.js";
 import { loadStandardAgentResources } from "../../modeling/runs/pipelines/standard/standard-agent-resources.js";
 import { SettingsManager } from "@earendil-works/pi-coding-agent";
 import { createStandardResourceReadTool } from "../../modeling/runs/pipelines/standard/standard-modeling-knowledge.js";
+import { mcpSaveSchema } from "../../../shared/contracts/agent-integrations.js";
 
 test("recommended integrations persist, credentials are encrypted and omitted maps retain them", async t => {
   const directory = await mkdtemp(join(tmpdir(), "softjl-integrations-"));
@@ -16,6 +17,8 @@ test("recommended integrations persist, credentials are encrypted and omitted ma
   const initial = await store.overview();
   assert.equal(initial.servers.length, 6); assert.equal(initial.skills.length, 7);
   assert.ok(initial.servers.every(item => !item.enabled));
+  assert.ok(initial.servers.every(item => item.exposure === "direct"));
+  assert.equal(mcpSaveSchema.parse({ name: "Docs", description: "", enabled: false, config: { type: "http", url: "https://example.test/mcp" } }).exposure, "direct");
   await store.saveServer("private-docs", { name: "Private docs", description: "test", enabled: true, exposure: "deferred", config: { type: "http", url: "https://example.test/mcp", headers: { Authorization: "Bearer private-test-credential" } } });
   assert.ok(!(await readFile(join(directory, "integrations.json"), "utf8")).includes("private-test-credential"));
   const view = (await store.overview()).servers.find(item => item.id === "private-docs")!;
@@ -51,6 +54,7 @@ test("Skill snapshots load in Pi and remain isolated from later edits and unrela
   const first = await store.runtimeSnapshot();
   const loader = await loadStandardAgentResources(directory, SettingsManager.inMemory(), "test", { managedSkillPaths: first.skillPaths });
   assert.equal(loader.getSkills().skills.length, 8);
+  assert.deepEqual(loader.getSkills().diagnostics, []);
   const path = first.skillPaths.find(path => path.includes("local-workflow"))!;
   await store.saveSkill("local-workflow", { name: "local-workflow", description: "When reviewing test cases", content: "# Workflow\nChanged guidance.", enabled: false });
   assert.equal((await store.runtimeSnapshot()).skillPaths.some(path => path.includes("local-workflow")), false);

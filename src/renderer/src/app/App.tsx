@@ -1,75 +1,25 @@
 // Composes application providers, route matching, workspace shell layout, and top-level page selection.
 "use client";
 
-import { DefaultPagesLayout } from "../shared/template/layout/default-pages-layout.js";
-import { ProjectSidebar } from "../features/workspace-shell/components/project-sidebar.js";
-import { PlatformSidebar } from "../features/workspace-shell/components/platform-sidebar.js";
-import React, { useCallback, useEffect, useState, type ReactNode } from "react";
-import { SidebarProvider, useSidebar } from "../shared/ui/sidebar.js";
-import { TooltipProvider } from "../shared/ui/tooltip.js";
-import Error404 from "../shared/template/views/pages/misc/error-page-404/index.js";
-import { PageErrorBoundary } from "../shared/ui/page-error-boundary.js";
-import { FeedbackDialogProvider } from "../shared/ui/feedback-dialog.js";
-import { FloatingAlertProvider } from "../shared/ui/floating-alert.js";
-import { ProviderAvailabilityNotice } from "../features/settings/components/provider-availability-notice.js";
-import { ThemeProvider } from "../shared/ui/theme-provider.js";
+import React,{ useCallback,useEffect,useState,type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AppI18nProvider, useAppI18n } from "../shared/i18n/i18n-provider.js";
-import {
-  DesignDiagramView,
-  DiagramView,
-} from "../features/diagrams/components/diagram-detail-page.js";
-
-import { DesignModelPage } from "../features/design/components/design-model-page.js";
-import { InstructionDocumentsPage } from "../features/documents/components/instruction-documents-page.js";
-import {
-  RequirementsModelPage,
-  SystemRequirementsPage,
-} from "../features/requirements/components/text-requirement-page.js";
-import { FeasibilityPage } from "../features/feasibility/components/feasibility-page.js";
-import { TraceabilityMatrixPage } from "../features/traceability/components/traceability-matrix-page.js";
-import { TestModelPage } from "../features/testing/components/test-model-page.js";
-import { SidebarMenu } from "../features/workspace-shell/components/sidebar-menu.js";
-import {
-  TopBar,
-  type TopBarProps,
-} from "../features/workspace-shell/components/top-bar.js";
-import {
-  matchAppRoute,
-  type AppRoute,
-  type ProjectRouteSection,
-} from "./app-routes.js";
-import { StandardWorkspace } from "../features/standard-project/components/standard-workspace.js";
-import { LineageGraphPage } from "../features/lineage/components/lineage-graph-page.js";
-
-import { WorkspaceRepositoryProvider } from "../services/workspace-repository/index.js";
-import {
-  WorkspaceShellProvider,
-  useWorkspaceShell,
-} from "../features/workspace-shell/state.js";
-import {
-  WorkspaceSessionProvider,
-  useWorkspaceSession,
-} from "../features/workspace-session/state.js";
-import {
-  AuthenticatedRoute,
-  ProjectNewPage,
-  ProjectWorkspaceDrawer,
-  ProjectSectionPage,
-  type ProjectDrawerKind,
-  ProjectWorkspaceAccessBoundary,
-  ProjectsIndexPage,
-  useProjectOverview,
-} from "../features/user-platform/components/user-platform-pages.js";
 import { DashboardPage } from "../features/dashboard/components/dashboard-page.js";
 import { OnboardingTourProvider } from "../features/onboarding/components/onboarding-tour-provider.js";
-import { useProjectOnboarding } from "../features/onboarding/hooks/use-project-onboarding.js";
-import {
-  PROJECT_TASK_DRAWER_REQUEST_EVENT,
-  PROJECT_WORKSPACE_TARGET_REQUEST_EVENT,
-  type ProjectTaskDrawerRequest,
-  type ProjectWorkspaceTarget,
-} from "../shared/lib/app-navigation.js";
+import { ProviderAvailabilityNotice } from "../features/settings/components/provider-availability-notice.js";
+import { StandardWorkspace } from "../features/standard-project/components/standard-workspace.js";
+import { AuthenticatedRoute,ProjectNewPage,ProjectSectionPage,ProjectWorkspaceAccessBoundary,ProjectsIndexPage,useProjectOverview } from "../features/user-platform/components/user-platform-pages.js";
+import { PlatformSidebar } from "../features/workspace-shell/components/platform-sidebar.js";
+import { TopBar } from "../features/workspace-shell/components/top-bar.js";
+import { AppI18nProvider,useAppI18n } from "../shared/i18n/i18n-provider.js";
+import { DefaultPagesLayout } from "../shared/template/layout/default-pages-layout.js";
+import Error404 from "../shared/template/views/pages/misc/error-page-404/index.js";
+import { FeedbackDialogProvider } from "../shared/ui/feedback-dialog.js";
+import { FloatingAlertProvider } from "../shared/ui/floating-alert.js";
+import { PageErrorBoundary } from "../shared/ui/page-error-boundary.js";
+import { SidebarProvider } from "../shared/ui/sidebar.js";
+import { ThemeProvider } from "../shared/ui/theme-provider.js";
+import { TooltipProvider } from "../shared/ui/tooltip.js";
+import { matchAppRoute,type AppRoute,type ProjectRouteSection } from "./app-routes.js";
 
 function getProtectedRoutePath(route: AppRoute) {
   // Project sections share one authentication scope so menu changes keep the workspace mounted.
@@ -88,395 +38,19 @@ function getProtectedRoutePath(route: AppRoute) {
   return null;
 }
 
-function ProjectWorkspaceShell({
-  header,
-  projectId,
-  projectSection,
-  activeProjectDrawer,
-  onActiveProjectDrawerChange,
-  onOpenProviderSettings,
-  onOpenAccount,
-  onNavigate,
-  preferredTaskRunId,
-}: {
-  header: React.ReactNode;
-  projectId: string;
-  projectSection: ProjectRouteSection | null;
-  activeProjectDrawer: ProjectDrawerKind | null;
-  onActiveProjectDrawerChange: (drawer: ProjectDrawerKind | null) => void;
-  onOpenProviderSettings: () => void;
-  onOpenAccount: () => void;
-  onNavigate: (route: string) => void;
-  preferredTaskRunId?: string | null;
+function ProjectWorkspaceShell({ header, projectId, projectSection, onOpenAccount, onNavigate }: {
+  header: React.ReactNode; projectId: string; projectSection: ProjectRouteSection | null;
+  onOpenAccount: () => void; onNavigate: (route: string) => void;
 }) {
-  const { t } = useTranslation();
-  const {
-    openDesignHome,
-    openFeasibilityHome,
-    openRequirementsText,
-    openSystemRequirements,
-    selection,
-  } = useWorkspaceShell();
-  const { setOpenMobile } = useSidebar();
-  const projectOverview = useProjectOverview(projectId);
-  const { startProjectTour } = useProjectOnboarding(
-    projectId,
-    projectOverview.project?.projectMode === "professional",
-  );
-  const projectRuns = projectOverview.runs;
-  const projectPath = `/projects/${encodeURIComponent(projectId)}`;
-  const traceabilityPrefix = t("traceability.title.scoped", { label: "" });
-  const traceabilityScopeLabel = (label: string) =>
-    label.startsWith(traceabilityPrefix)
-      ? label.slice(traceabilityPrefix.length)
-      : label;
-  const closeDrawer = () => {
-    onActiveProjectDrawerChange(null);
-  };
-  // Section routes share the mounted workspace; model navigation only changes its active view.
-  const returnToWorkspace = () => {
-    setOpenMobile(false);
-    if (projectSection) onNavigate(projectPath);
-  };
-
-  useEffect(() => {
-    const openRequestedTarget = (event: Event) => {
-      const target = (event as CustomEvent<ProjectWorkspaceTarget>).detail;
-      if (target === "system-requirements") openSystemRequirements();
-      if (target === "requirement-models") openRequirementsText();
-      if (target === "design-models") openDesignHome();
-      if (target === "feasibility") openFeasibilityHome();
-      if (target === "provider-settings") onOpenProviderSettings();
-      else if (projectSection)
-        onNavigate(`/projects/${encodeURIComponent(projectId)}`);
-    };
-    window.addEventListener(
-      PROJECT_WORKSPACE_TARGET_REQUEST_EVENT,
-      openRequestedTarget,
-    );
-    return () => {
-      window.removeEventListener(
-        PROJECT_WORKSPACE_TARGET_REQUEST_EVENT,
-        openRequestedTarget,
-      );
-    };
-  }, [
-    onOpenProviderSettings,
-    openDesignHome,
-    openFeasibilityHome,
-    openRequirementsText,
-    openSystemRequirements,
-    projectId,
-    projectSection,
-    onNavigate,
-  ]);
-
-  let body: ReactNode;
-  switch (selection.kind) {
-    case "system-requirements":
-      body = <SystemRequirementsPage />;
-      break;
-    case "requirements-text":
-      body = <RequirementsModelPage />;
-      break;
-    case "feasibility-home":
-      body = (
-        <FeasibilityPage
-          view="overview"
-          initialSelectedArtifacts={selection.initialSelectedArtifacts}
-        />
-      );
-      break;
-    case "feasibility-context":
-      body = <FeasibilityPage view="context" />;
-      break;
-    case "feasibility-business-flow":
-      body = <FeasibilityPage view="business-flow" />;
-      break;
-    case "feasibility-context-element":
-      body = (
-        <FeasibilityPage
-          view="context"
-          highlightedElement={{
-            kind: selection.elementKind,
-            id: selection.elementId,
-          }}
-        />
-      );
-      break;
-    case "feasibility-context-relationship":
-      body = (
-        <FeasibilityPage
-          view="relations"
-          highlightedRelationshipId={selection.relationshipId}
-        />
-      );
-      break;
-    case "feasibility-context-trace":
-      body = <FeasibilityPage view="trace" />;
-      break;
-    case "feasibility-context-elements":
-      body = <FeasibilityPage view="elements" />;
-      break;
-    case "feasibility-context-relations":
-      body = <FeasibilityPage view="relations" />;
-      break;
-    case "feasibility-business-flow-element":
-      body = (
-        <FeasibilityPage
-          view="business-flow"
-          highlightedElement={{
-            kind: selection.elementKind,
-            id: selection.elementId,
-          }}
-        />
-      );
-      break;
-    case "feasibility-business-flow-relationship":
-      body = (
-        <FeasibilityPage
-          view="business-flow-relations"
-          highlightedRelationshipId={selection.relationshipId}
-        />
-      );
-      break;
-    case "feasibility-business-flow-trace":
-      body = <FeasibilityPage view="business-flow-trace" />;
-      break;
-    case "feasibility-business-flow-elements":
-      body = <FeasibilityPage view="business-flow-elements" />;
-      break;
-    case "feasibility-business-flow-relations":
-      body = <FeasibilityPage view="business-flow-relations" />;
-      break;
-    case "feasibility-implementation":
-      body = (
-        <FeasibilityPage
-          view="implementation"
-          initialCandidateId={selection.candidateId}
-        />
-      );
-      break;
-    case "requirement-trace-matrix":
-      body = (
-        <TraceabilityMatrixPage
-          mode="requirements"
-          scope={{
-            diagramKind: selection.diagram,
-            modelId: selection.modelId,
-            label: traceabilityScopeLabel(selection.label),
-          }}
-        />
-      );
-      break;
-    case "diagram-element":
-      body = (
-        <DiagramView
-          type={selection.diagram}
-          modelId={selection.modelId}
-          highlightedElement={{
-            kind: selection.elementKind,
-            id: selection.elementId,
-          }}
-        />
-      );
-      break;
-    case "diagram-relationship":
-      body = (
-        <DiagramView
-          type={selection.diagram}
-          modelId={selection.modelId}
-          initialSection="relations"
-          highlightedRelationshipId={selection.relationshipId}
-        />
-      );
-      break;
-    case "diagram":
-      body = (
-        <DiagramView
-          type={selection.diagram}
-          modelId={selection.modelId}
-          highlightedElement={null}
-        />
-      );
-      break;
-    case "design-home":
-      body = <DesignModelPage />;
-      break;
-    case "design-trace-matrix":
-      body = (
-        <TraceabilityMatrixPage
-          mode="design"
-          scope={{
-            diagramKind: selection.diagram,
-            modelId: selection.modelId,
-            label: traceabilityScopeLabel(selection.label),
-          }}
-        />
-      );
-      break;
-    case "test-home":
-      body = <TestModelPage />;
-      break;
-    case "design-diagram":
-      body = (
-        <DesignDiagramView
-          type={selection.diagram}
-          modelId={selection.modelId}
-          highlightedElement={null}
-        />
-      );
-      break;
-    case "design-diagram-element":
-      body = (
-        <DesignDiagramView
-          type={selection.diagram}
-          modelId={selection.modelId}
-          highlightedElement={{
-            kind: selection.elementKind,
-            id: selection.elementId,
-          }}
-        />
-      );
-      break;
-    case "design-diagram-relationship":
-      body = (
-        <DesignDiagramView
-          type={selection.diagram}
-          modelId={selection.modelId}
-          initialSection="relations"
-          highlightedRelationshipId={selection.relationshipId}
-        />
-      );
-      break;
-    case "documents-home":
-      body = <InstructionDocumentsPage />;
-      break;
-    case "document-editor":
-      body = (
-        <InstructionDocumentsPage activeDocumentId={selection.documentId} />
-      );
-      break;
-  }
-
-  if (projectSection === "lineage") {
-    body = (
-      <LineageGraphPage
-        projectId={projectId}
-        projectRuns={projectRuns}
-        members={projectOverview.members}
-        documents={projectOverview.documents}
-        onViewArtifact={returnToWorkspace}
-      />
-    );
-  } else if (projectSection === "documents") {
-    body = <InstructionDocumentsPage />;
-  } else if (projectSection) {
-    body = (
-      <ProjectSectionPage
-        projectId={projectId}
-        section={projectSection}
-        onNavigate={onNavigate}
-      />
-    );
-  }
-
-  if (projectOverview.project?.projectMode === "standard") {
-    return (
-      <StandardWorkspace
-        key={projectId}
-        projectId={projectId}
-        canEdit={
-          projectOverview.project.status === "active" &&
-          ["owner", "editor"].includes(projectOverview.membership?.role ?? "")
-        }
-        header={header}
-        onNavigate={onNavigate}
-        onOpenAccount={onOpenAccount}
-        projectSection={projectSection}
-        sectionContent={
-          projectSection && projectSection !== "lineage" ? body : undefined
-        }
-      />
-    );
-  }
-
-  return (
-    <DefaultPagesLayout
-      sidebar={
-        <ProjectSidebar
-          onOpenAccount={onOpenAccount}
-          onNavigate={onNavigate}
-        >
-          <SidebarMenu
-            projectRuns={projectRuns}
-            activeProjectSection={projectSection}
-            onOpenProjectSection={(section) =>
-              onNavigate(`${projectPath}/${section}`)
-            }
-            onNavigateItemSelect={returnToWorkspace}
-          />
-        </ProjectSidebar>
-      }
-      header={
-        React.isValidElement(header)
-          ? React.cloneElement(header as React.ReactElement<TopBarProps>, {
-              projectDrawer: {
-                projectId,
-                onOpenDrawer: onActiveProjectDrawerChange,
-                projectRuns,
-                projectName: projectOverview.project?.name ?? projectId,
-                onStartTour: () => {
-                  void startProjectTour();
-                },
-              },
-            })
-          : header
-      }
-      contentClassName="min-w-0 p-0"
-    >
-      <div className="relative flex min-h-full flex-col bg-background">
-        <div className="relative min-h-0 flex-1">
-          <div
-            id="workspace-active-panel"
-            role="tabpanel"
-            className="min-h-0 overflow-x-clip"
-          >
-            {body}
-          </div>
-          <ProjectWorkspaceDrawer
-            projectId={projectId}
-            activeDrawer={activeProjectDrawer}
-            onNavigate={onNavigate}
-            onClose={closeDrawer}
-            preferredTaskRunId={preferredTaskRunId}
-          />
-        </div>
-      </div>
-    </DefaultPagesLayout>
-  );
+  const overview = useProjectOverview(projectId);
+  return <StandardWorkspace key={projectId} projectId={projectId}
+    canEdit={overview.project?.status === "active" && ["owner", "editor"].includes(overview.membership?.role ?? "")}
+    header={header} onNavigate={onNavigate} onOpenAccount={onOpenAccount} projectSection={projectSection}
+    sectionContent={projectSection ? <ProjectSectionPage projectId={projectId} section={projectSection} onNavigate={onNavigate} /> : undefined} />;
 }
 
 export function Shell({ initialPath }: { initialPath?: string }) {
   const { locale } = useAppI18n();
-  const [activeProjectDrawer, setActiveProjectDrawer] =
-    useState<ProjectDrawerKind | null>(null);
-  const [preferredTaskRunId, setPreferredTaskRunId] = useState<string | null>(
-    null,
-  );
-  const { generationTasks, selectGenerationTask } = useWorkspaceSession();
-  // A run pinned by "查看任务" must not hide later work: opening the drawer from the shell
-  // or starting a new task shows the current task again.
-  const openProjectDrawer = useCallback((kind: ProjectDrawerKind | null) => {
-    if (kind === "tasks") setPreferredTaskRunId(null);
-    setActiveProjectDrawer(kind);
-  }, []);
-  const newestActiveTaskId =
-    generationTasks.find((task) => ["queued", "running"].includes(task.status))
-      ?.clientTaskId ?? null;
-  useEffect(() => {
-    if (newestActiveTaskId) setPreferredTaskRunId(null);
-  }, [newestActiveTaskId]);
   const [accountDialogOpen, setAccountDialogOpen] = useState(false);
   const [globalSettingsRequestId, setGlobalSettingsRequestId] = useState(0);
   const openProviderSettings = useCallback(() => {
@@ -509,7 +83,6 @@ export function Shell({ initialPath }: { initialPath?: string }) {
 
   useEffect(() => {
     const handlePopState = () => {
-      setActiveProjectDrawer(null);
       setLoginLoadingRoute(null);
       setRoute(matchAppRoute(window.location.pathname));
     };
@@ -518,33 +91,6 @@ export function Shell({ initialPath }: { initialPath?: string }) {
       window.removeEventListener("popstate", handlePopState);
     };
   }, []);
-
-  useEffect(() => {
-    const openRequestedTask = (event: Event) => {
-      const detail =
-        (event as CustomEvent<ProjectTaskDrawerRequest>).detail ?? {};
-      const localTask = detail.clientTaskId
-        ? generationTasks.find(
-            (task) => task.clientTaskId === detail.clientTaskId,
-          )
-        : detail.runId
-          ? generationTasks.find((task) => task.runId === detail.runId)
-          : null;
-      if (localTask) selectGenerationTask(localTask.clientTaskId);
-      setPreferredTaskRunId(localTask ? null : (detail.runId ?? null));
-      setActiveProjectDrawer("tasks");
-    };
-    window.addEventListener(
-      PROJECT_TASK_DRAWER_REQUEST_EVENT,
-      openRequestedTask,
-    );
-    return () => {
-      window.removeEventListener(
-        PROJECT_TASK_DRAWER_REQUEST_EVENT,
-        openRequestedTask,
-      );
-    };
-  }, [generationTasks, selectGenerationTask]);
 
   const navigate = useCallback(
     (nextPath: string, options?: { fromLogin?: boolean }) => {
@@ -563,7 +109,6 @@ export function Shell({ initialPath }: { initialPath?: string }) {
           : null,
       );
       const nextLocation = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
-      setActiveProjectDrawer(null);
       if (
         `${window.location.pathname}${window.location.search}` !== nextLocation
       ) {
@@ -601,7 +146,6 @@ export function Shell({ initialPath }: { initialPath?: string }) {
           projectId={route.projectId}
           onNavigate={navigate}
         >
-          <WorkspaceShellProvider key={route.projectId}>
             <ProjectWorkspaceShell
               header={
                 <TopBar
@@ -614,14 +158,9 @@ export function Shell({ initialPath }: { initialPath?: string }) {
               }
               projectId={route.projectId}
               projectSection={route.section ?? null}
-              activeProjectDrawer={activeProjectDrawer}
-              onActiveProjectDrawerChange={openProjectDrawer}
-              onOpenProviderSettings={openProviderSettings}
               onOpenAccount={() => setAccountDialogOpen(true)}
               onNavigate={navigate}
-              preferredTaskRunId={preferredTaskRunId}
             />
-          </WorkspaceShellProvider>
         </ProjectWorkspaceAccessBoundary>
       );
     }
@@ -731,11 +270,7 @@ export default function App({ initialPath }: { initialPath?: string }) {
       <ThemeProvider>
         <TooltipProvider>
           <FeedbackDialogProvider>
-            <WorkspaceRepositoryProvider>
-              <WorkspaceSessionProvider>
                 <Shell initialPath={initialPath} />
-              </WorkspaceSessionProvider>
-            </WorkspaceRepositoryProvider>
           </FeedbackDialogProvider>
         </TooltipProvider>
       </ThemeProvider>

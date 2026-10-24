@@ -1,4 +1,4 @@
-// Adapts ordinary saved tests to the same statistics, filters and table used by professional projects.
+// Displays the test cases saved by the project conversation.
 import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import type { StandardProjectState } from "../../../../../shared/contracts/index.js";
@@ -16,5 +16,5 @@ export function StandardTestsPage({ state }: { state: StandardProjectState }) {
       useCaseIds: Object.values(state.diagrams).filter(diagram => diagram.businessId === test.businessId && diagram.status === "completed").map(diagram => diagram.title),
       designModelRefs: [], coverageStatus: "pending-review", rationale: t("standardProject.testSource") })),
   }), [state.tests, state.diagrams, state.outline, t]);
-  return <TestModelPage ordinary={{ result }} />;
+  return <TestModelPage result={result} />;
 }

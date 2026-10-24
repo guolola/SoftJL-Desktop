@@ -1,13 +1,13 @@
-// Shares the professional project's navigation tree, disclosure, flyouts and management links across project modes.
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../shared/ui/collapsible.js';
-import { SidebarGroup, SidebarGroupLabel, SidebarGroupContent, SidebarMenu as TemplateSidebarMenu, SidebarMenuItem, SidebarMenuSub, SidebarMenuAction, SidebarMenuButton, useSidebar } from '../../../shared/ui/sidebar.js';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent, DropdownMenuSeparator, DropdownMenuGroup } from '../../../shared/ui/dropdown-menu.js';
-import type { Dispatch, ReactNode, SetStateAction } from 'react';
+// Renders project model navigation, flyouts and shared management links.
+import { CheckCircle2,ChevronRight,CircleAlert,Clock3,History,Loader2,Settings2,XCircle } from 'lucide-react';
+import type { Dispatch,ReactNode,SetStateAction } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronRight, Clock3, Loader2, XCircle, CheckCircle2, CircleAlert, GitBranch, History, Settings2, } from 'lucide-react';
 import type { ProjectRouteSection } from '../../../shared/lib/app-route-types.js';
-import { cn } from '../../../shared/ui/utils.js';
+import { Collapsible,CollapsibleContent,CollapsibleTrigger } from '../../../shared/ui/collapsible.js';
+import { DropdownMenu,DropdownMenuContent,DropdownMenuGroup,DropdownMenuItem,DropdownMenuSeparator,DropdownMenuSub,DropdownMenuSubContent,DropdownMenuSubTrigger,DropdownMenuTrigger } from '../../../shared/ui/dropdown-menu.js';
 import { floatingAlert } from '../../../shared/ui/floating-alert.js';
+import { SidebarGroup,SidebarGroupContent,SidebarGroupLabel,SidebarMenuAction,SidebarMenuButton,SidebarMenuItem,SidebarMenuSub,SidebarMenu as TemplateSidebarMenu,useSidebar } from '../../../shared/ui/sidebar.js';
+import { cn } from '../../../shared/ui/utils.js';
 import type { SidebarNodeStatus } from '../lib/sidebar-menu-model.js';
 import { mergeSidebarStatus } from '../lib/sidebar-menu-model.js';
 
@@ -83,7 +83,7 @@ function GenerationStatusIndicator({
       ? t("workspace.sidebar.generating")
       : status === "failed"
         ? t("workspace.sidebar.generationFailed")
-        : status === "stale" ? t("feasibility.status.stale") : t("workspace.sidebar.generated"));
+        : status === "stale" ? t("workspace.sidebar.needsUpdate") : t("workspace.sidebar.generated"));
   return (
     <span
       aria-label={label}
@@ -198,7 +198,7 @@ function TreeItem({
   );
 }
 
-export function ProjectSidebarNavigation({ tree, selectedKey, openKeys, setOpenKeys, onNavigateItemSelect, activeProjectSection, onOpenProjectSection, includeLineage = true, includeHistory = true }: {
+export function ProjectSidebarNavigation({ tree, selectedKey, openKeys, setOpenKeys, onNavigateItemSelect, activeProjectSection, onOpenProjectSection, includeHistory = true }: {
   tree: Node[];
   selectedKey: string;
   openKeys: Set<string>;
@@ -206,15 +206,14 @@ export function ProjectSidebarNavigation({ tree, selectedKey, openKeys, setOpenK
   onNavigateItemSelect?: () => void;
   activeProjectSection?: ProjectRouteSection | null;
   onOpenProjectSection?: (section: ProjectRouteSection) => void;
-  includeLineage?: boolean;
   includeHistory?: boolean;
 }) {
   const { t } = useTranslation();
   const { setOpenMobile } = useSidebar();
   const projectItems: { section: ProjectRouteSection; label: string; icon: ReactNode; id?: string }[] = [
-    { section: "lineage", label: t("status.lineage"), icon: <GitBranch /> },
     { section: "history", label: t("status.runHistory"), icon: <History />, id: "onboarding-history-action" },
-    { section: "settings", label: t("projectShell.sections.settings"), icon: <Settings2 />, id: "onboarding-settings-action" },  ];
+    { section: "settings", label: t("projectShell.sections.settings"), icon: <Settings2 />, id: "onboarding-settings-action" },
+  ];
 
   return (
     <nav aria-label={t("workspace.sidebar.navigation")} className="h-full w-full">
@@ -230,7 +229,7 @@ export function ProjectSidebarNavigation({ tree, selectedKey, openKeys, setOpenK
         <SidebarGroupLabel>{t("projectShell.management")}</SidebarGroupLabel>
         <SidebarGroupContent>
           <TemplateSidebarMenu>
-            {projectItems.filter(item => (includeLineage || item.section !== "lineage") && (includeHistory || item.section !== "history")).map(item => <SidebarMenuItem key={item.section}>
+            {projectItems.filter(item => (includeHistory || item.section !== "history")).map(item => <SidebarMenuItem key={item.section}>
               <SidebarMenuButton
                 id={item.id}
                 tooltip={item.label}

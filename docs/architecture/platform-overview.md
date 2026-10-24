@@ -7,7 +7,7 @@
 
 ## 概述
 
-独立 Windows Electron 应用保留建模业务，使用本地数据库和受保护的回环后台。
+独立 Windows Electron 应用通过单一项目对话完成建模，使用本地数据库和受保护的回环后台。
 
 ## 当前设计或配置
 
@@ -26,5 +26,5 @@ npm run typecheck、npm run test:desktop、npm run test:modeling 与 npm run smo
 ## 相关文档
 
 - [桌面运行与打包](../development/desktop-runtime.md)
-- [可信生成](trusted-generation.md)
+- [建模能力](modeling-capabilities.md)
 - [项目首页](../../README.md)

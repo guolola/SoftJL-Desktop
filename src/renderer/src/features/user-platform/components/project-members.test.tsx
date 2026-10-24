@@ -15,7 +15,7 @@ const project: PlatformProject = {
   description: null,
 
   status: "active",
-  projectMode: "professional", ownerUserId: "owner-1",
+  ownerUserId: "owner-1",
   updatedAt: "2026-09-22T00:00:00.000Z",
 };
 

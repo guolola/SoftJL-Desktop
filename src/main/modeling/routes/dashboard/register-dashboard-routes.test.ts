@@ -4,7 +4,10 @@ import test from "node:test";
 import Fastify from "fastify";
 import { createInMemoryAuthStore } from "../../auth/in-memory-auth-store.js";
 import { createRunRecordStore } from "../../runs/records/run-record-store.js";
-import { createEmptySnapshot } from "../../runs/records/snapshots.js";
+import { createEmptySnapshot as createSnapshot } from "../../runs/records/snapshots.js";
+function createEmptySnapshot(runId: string) {
+  return { ...createSnapshot(runId), standardRun: { operation: "chat", providerConfigId: "provider", model: "model-a", baseline: {}, artifacts: [] } };
+}
 import type { DocumentLibrary } from "../../documents/library/document-library.js";
 import { registerDashboardRoutes } from "./register-dashboard-routes.js";
 
@@ -21,7 +24,7 @@ test("requires login and aggregates only active memberships, including archived 
   const projects = Array.from({ length: 8 }, (_, i) => authStore.createProject({ ownerUserId: i === 7 ? other.id : user.id, name: `P${i}`, description: null }).project);
   projects[6].status = "archived";
   authStore.saveProjectWorkspace({ projectId: projects[0].id, baseVersion: 0, updatedByUserId: user.id,
-    state: { models: { "analysis:a": { diagramKind: "analysis" }, "analysis:b": { diagramKind: "analysis" }, usecase: { diagramKind: "usecase" } } } });
+    state: { standardProject: { diagrams: { a: { kind: "activity", status: "completed", model: { diagramKind: "activity" }, svg: "<svg/>" }, b: { kind: "usecase", status: "completed", model: { diagramKind: "usecase" }, svg: "<svg/>" } } } } });
   for (const project of projects) {
     const snapshot = createEmptySnapshot(project.id, "requirements", []); snapshot.status = "completed";
     runs.set(project.id, { snapshot, events: [], terminal: true, listeners: new Set(), metadata: { projectId: project.id, createdAt: "2026-10-01T00:00:00Z" } });
@@ -33,8 +36,8 @@ test("requires login and aggregates only active memberships, including archived 
   assert.equal(response.json().totals.completed, 7);
   const progress = response.json().projects.find((project: { id: string }) => project.id === projects[0].id).progress;
   assert.equal(progress.completed, 2);
-  assert.equal(progress.total, 20);
-  assert.equal(progress.percentage, 10);
+  assert.equal(progress.total, 10);
+  assert.equal(progress.percentage, 20);
   assert.equal(response.json().projects.find((project: { id: string }) => project.id === projects[6].id).progress.completed, 0);
   assert.ok(!documentCalls.includes(projects[7].id));
   assert.ok(!response.body.includes(projects[7].id));

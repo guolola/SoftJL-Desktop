@@ -23,7 +23,7 @@ describe('DashboardPage shell-06', () => {
     expect(screen.getByText('文档生成任务')).toBeInTheDocument()
     const duration = screen.getAllByText('平均生成耗时')[0].closest('[data-slot="card"]')!
     expect(within(duration as HTMLElement).getAllByText('需求规格说明书').length).toBeGreaterThan(0)
-    expect(within(duration as HTMLElement).getAllByText('实现方案').length).toBeGreaterThan(0)
+    expect(within(duration as HTMLElement).getAllByText('设计·类模型').length).toBeGreaterThan(0)
     expect(within(duration as HTMLElement).queryByText('66.7%')).not.toBeInTheDocument()
     expect(screen.queryByText('Total Profit')).not.toBeInTheDocument()
     expect(screen.queryByText('仪表盘')).not.toBeInTheDocument()
@@ -43,7 +43,7 @@ describe('DashboardPage shell-06', () => {
     render(<DashboardPage onNavigate={() => {}} />); await screen.findByTestId('dashboard-06-grid')
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     expect(screen.getByText('项目 6')).toBeInTheDocument()
-    expect(within(screen.getByRole('table', { name: '项目列表' })).getByText('0/20')).toBeInTheDocument()
+    expect(within(screen.getByRole('table', { name: '项目列表' })).getByText('0/10')).toBeInTheDocument()
     fireEvent.change(screen.getByRole('textbox', { name: '搜索项目' }), { target: { value: '图书馆' } })
     expect(screen.getByRole('checkbox', { name: '选择项目 图书馆系统' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: '选择项目 图书馆系统' }))
@@ -55,17 +55,17 @@ describe('DashboardPage shell-06', () => {
   })
   it('shows stage completion instead of generation success and sorts by numeric workflow progress', async () => {
     const summary = dashboardFixture(3)
-    summary.projects[1].progress = { completed: 20, total: 20, percentage: 100 }
-    summary.projects[2].progress = { completed: 5, total: 20, percentage: 25 }
+    summary.projects[1].progress = { completed: 10, total: 10, percentage: 100 }
+    summary.projects[2].progress = { completed: 2, total: 10, percentage: 20 }
     vi.mocked(dashboardApi.getSummary).mockResolvedValue(summary)
     render(<DashboardPage onNavigate={() => {}} />); await screen.findByTestId('dashboard-06-grid')
     const table = screen.getByRole('table', { name: '项目列表' })
     expect(within(table).getByRole('columnheader', { name: '进度' })).toBeInTheDocument()
     expect(within(table).queryByRole('columnheader', { name: '生成成功率' })).not.toBeInTheDocument()
     const row = within(table).getByRole('button', { name: '图书馆系统' }).closest('tr')!
-    expect(within(row).getByText('15/20')).toBeInTheDocument()
-    expect(within(row).getByRole('progressbar', { name: '进度' })).toHaveAttribute('aria-valuenow', '75')
-    expect(within(row).getByText('15/20').parentElement).toHaveAttribute('title', '可行性分析: 3/3 · 需求模型: 7/7 · 设计模型: 5/7 · 说明书: 0/3')
+    expect(within(row).getByText('8/10')).toBeInTheDocument()
+    expect(within(row).getByRole('progressbar', { name: '进度' })).toHaveAttribute('aria-valuenow', '80')
+    expect(within(row).getByText('8/10').parentElement).toHaveAttribute('title', '需求模型: 3/3 · 设计模型: 4/5 · 说明书: 1/2')
     fireEvent.click(within(table).getByRole('button', { name: '进度' }))
     expect(within(table).getByRole('columnheader', { name: '进度' })).toHaveAttribute('aria-sort', 'descending')
     expect(within(table).getAllByRole('row')[1]).toHaveTextContent('项目 1')

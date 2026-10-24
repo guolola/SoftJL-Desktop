@@ -47,7 +47,6 @@ export type SessionRecord = {
 };
 
 export type ProjectRecord = {
-  projectMode?: "standard" | "professional";
   id: string;
   name: string;
   description: string | null;
@@ -430,7 +429,6 @@ function createAuthToken(
   }
 
   function createProject(input: {
-    projectMode?: "standard" | "professional";
     ownerUserId: string;
     name: string;
     description: string | null;
@@ -439,7 +437,6 @@ function createAuthToken(
   }) {
     const createdAt = now();
     const project: ProjectRecord = {
-      projectMode: input.projectMode ?? "professional",
       id: randomUUID(),
       name: input.name,
       description: input.description,

@@ -117,7 +117,7 @@ export function UserMessage(): ReactNode {
   );
 }
 
-export function AssistantMessage({ hideActivity = false }: { hideActivity?: boolean } = {}): ReactNode {
+export function AssistantMessage({ hideActivity = false, hideText = false }: { hideActivity?: boolean; hideText?: boolean } = {}): ReactNode {
   useHomeLocale();
   const hasRunningTool = useAuiState(s => s.message.parts.some(part => part.type === "tool-call" && part.status.type === "running"));
   return (
@@ -160,7 +160,7 @@ export function AssistantMessage({ hideActivity = false }: { hideActivity?: bool
               case "group-source":
                 return null;
               case "text":
-                return part.text === "" && part.status?.type === "running" ? (
+                return hideText ? null : part.text === "" && part.status?.type === "running" ? (
                   <TraceLine live label={homeText("thinking")} />
                 ) : (
                   <MarkdownText />

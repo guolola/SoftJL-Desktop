@@ -8,14 +8,6 @@
   ],
   "components": [
     {
-      "registry": "https://r.assistant-ui.com/elements-loading-state.json",
-      "documentation": "https://www.assistant-ui.com/elements/loading-state",
-      "source": "packages/ui/src/components/react/assistant-ui/elements/loading-state.tsx",
-      "file": "elements/loading-state.tsx",
-      "upstreamContentSha256": "1a40f01f59fa6857508e4ac9a723868b49f96084c68958f3adb41c5a6ca2ba56",
-      "installedFileSha256": "7a89cd618046e6364672484fd98f059ec7815d8d8e9e5d496b636cfae8203552"
-    },
-    {
       "registry": "https://r.assistant-ui.com/elements-approval-card.json",
       "documentation": "https://www.assistant-ui.com/elements/approval-card",
       "source": "packages/ui/src/components/react/assistant-ui/elements/approval-card.tsx",

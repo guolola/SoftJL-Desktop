@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { deriveTableModel, getModelGraphElements, getStageModelSchemas, validateModelInput, validateModelSemantics, type ModelingStage } from "./model-semantics.js";
 import { modelFixture, objectActivityFixture } from "../testing/model-fixtures.js";
 
-for (const stage of ["feasibility", "requirements", "design"] as ModelingStage[]) for (const schema of getStageModelSchemas(stage)) {
+for (const stage of ["requirements", "design"] as ModelingStage[]) for (const schema of getStageModelSchemas(stage)) {
   const kind = schema.shape.diagramKind.value;
   test(`${stage}/${kind}: legal graph and missing endpoint`, () => {
     const model = modelFixture(stage, kind);
@@ -28,12 +28,12 @@ for (const stage of ["feasibility", "requirements", "design"] as ModelingStage[]
 }
 
 test("duplicate lane identifiers authorize only their lane references", () => {
-  const model = modelFixture("feasibility", "activity");
+  const model = modelFixture("requirements", "activity");
   if (model.diagramKind !== "activity") throw new Error("fixture");
   model.swimlanes.push({ id: "work", name: "外部工具" });
   const work = model.nodes[1]!;
   work.actorOrLane = "work";
-  const diagnostic = validateModelInput(model, "feasibility").find(issue => issue.code === "duplicate-id")!;
+  const diagnostic = validateModelInput(model, "requirements").find(issue => issue.code === "duplicate-id")!;
   assert.equal(diagnostic.path, "swimlanes.1.id");
   assert.deepEqual(diagnostic.relatedPaths, ["nodes.1.actorOrLane"]);
 });

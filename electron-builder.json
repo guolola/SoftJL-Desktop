@@ -42,7 +42,7 @@
         ]
       }
     ],
-    "artifactName": "SoftJL-Desktop-${version}-Setup.${ext}"
+    "artifactName": "SoftJL-Desktop-${version}-windows-${arch}-setup.${ext}"
   },
   "nsis": {
     "installerIcon": "resources/icon.ico",

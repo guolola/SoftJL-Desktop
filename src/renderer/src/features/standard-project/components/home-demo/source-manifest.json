@@ -443,9 +443,9 @@
     "structureSha256": "025fecdb3a4ef5bc7b0cfe64c41f2e6ef12666d45bb64887ccbcc16853409deb",
     "adaptedStructureSha256": "f9f2dbcf718f5d704932e356ec0b4fc444bce4068349dee309ca05757dc339b7",
     "communityAdaptations": [
-      "Mount the official Elements loader through ConversationLoading for an empty live turn."
+      "Keep the pending response area free of the removed standalone loader."
     ],
-    "installedFileSha256": "b1fc8d326b9900efdc0135dd84e3900418561c1864f5845d6f168ca7790cfeb4"
+    "installedFileSha256": "d886ac179b4de42ff86e873c427142243ea661e05ef9ab65a31dfcbe5ee3d2d4"
   },
   {
     "file": "source/utils/persisted-preference.ts",

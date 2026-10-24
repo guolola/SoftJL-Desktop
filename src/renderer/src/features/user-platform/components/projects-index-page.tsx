@@ -21,7 +21,6 @@ import { cn } from "../../../shared/ui/utils.js";
 import { i18n as appI18n } from "../../../shared/i18n/index.js";
 import { localizeCaughtFailure } from "../../../shared/i18n/api-errors.js";
 import {
-  PROJECT_SCOPE_OPTIONS,
   projectFromApi,
 } from "../lib/project-presentation.js";
 import {
@@ -59,7 +58,6 @@ export function ProjectsIndexPage({ onNavigate }: { onNavigate: Navigate }) {
   const [forbidden, setForbidden] = useState(false);
   const [listError, setListError] = useState(false);
   const [search, setSearch] = useState("");
-  const [scope, setScope] = useState<(typeof PROJECT_SCOPE_OPTIONS)[number]["value"]>("all");
   const [sort, setSort] = useState("generated");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
@@ -134,7 +132,6 @@ export function ProjectsIndexPage({ onNavigate }: { onNavigate: Navigate }) {
     return projects
       .filter((project) => {
         if (query && !project.searchableText.includes(query)) return false;
-        if (scope === "standard" || scope === "professional") return project.projectMode === scope;
         return true;
       })
       .sort((left, right) => {
@@ -144,7 +141,7 @@ export function ProjectsIndexPage({ onNavigate }: { onNavigate: Navigate }) {
         }
         return right.updatedAt.localeCompare(left.updatedAt);
       });
-  }, [locale, projects, scope, search, sort]);
+  }, [locale, projects, search, sort]);
 
   // Paginate only after filtering and sorting so every project remains searchable.
   const pageCount = Math.max(1, Math.ceil(visibleProjects.length / pageSize));
@@ -252,28 +249,6 @@ export function ProjectsIndexPage({ onNavigate }: { onNavigate: Navigate }) {
             className="gap-0 py-0 p-3 md:p-[17px]"
           >
             <div className="flex min-w-0 flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between md:gap-8">
-              <div
-                className="grid w-full min-w-0 grid-cols-4 gap-1.5 md:w-auto md:shrink-0 md:flex md:gap-2"
-                role="group"
-                aria-label={t("projects.scopeAria")}
-              >
-                {PROJECT_SCOPE_OPTIONS.map((option) => {
-                  const selected = scope === option.value;
-                  return (
-                    <Button variant={selected ? "secondary" : "ghost"}
-                      key={option.value}
-                      type="button"
-                      aria-label={t(option.labelKey)}
-                      aria-pressed={selected}
-                      className="h-8 min-w-0 px-2 text-sm md:shrink-0 md:px-3"
-                      onClick={() => { setScope(option.value); setPage(1); }}
-                    >
-                      <span className="md:hidden">{t(option.shortLabelKey)}</span>
-                      <span className="hidden md:inline">{t(option.labelKey)}</span>
-                    </Button>
-                  );
-                })}
-              </div>
               <div className="flex w-full min-w-0 items-center gap-2 md:w-auto md:flex-1 md:justify-end md:gap-4">
                 <InputGroup className="min-w-0 flex-1 md:max-w-2xs">
                   <InputGroupAddon>

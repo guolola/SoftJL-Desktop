@@ -97,31 +97,6 @@ test("invitee search returns public registered identities and enforces invitatio
   assert.equal((await search("candidate")).json().users.length, 20);
 });
 
-test("project execution mode is read-only and reflects server demo configuration", async (t) => {
-  for (const key of ["UML_DEMO_OFFLINE_PROJECT_IDS", "UML_DEMO_OFFLINE_PROJECT_NAME_PATTERNS"]) {
-    const previous = process.env[key];
-    delete process.env[key];
-    t.after(() => { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; });
-  }
-  const { app, authStore } = await createTestApp();
-  t.after(() => app.close());
-  const { cookie } = await registerUser({ authStore, username: "mode", displayName: "Mode" });
-  const forged = await app.inject({ method: "POST", url: "/api/projects", headers: { cookie }, payload: { name: "Library Demo", generationExecutionMode: "offline-demo" } });
-  assert.equal(forged.statusCode, 400);
-  const project = await createProject({ app, cookie, name: "Library Demo" });
-  const read = () => app.inject({ method: "GET", url: `/api/projects/${project.id}`, headers: { cookie } });
-  assert.equal((await read()).json().generationExecutionMode, "provider");
-  process.env.UML_DEMO_OFFLINE_PROJECT_IDS = project.id;
-  assert.equal((await read()).json().generationExecutionMode, "offline-demo");
-  delete process.env.UML_DEMO_OFFLINE_PROJECT_IDS;
-  process.env.UML_DEMO_OFFLINE_PROJECT_NAME_PATTERNS = "Library Demo";
-  assert.equal((await read()).json().generationExecutionMode, "offline-demo");
-  const updated = await app.inject({ method: "PATCH", url: `/api/projects/${project.id}`, headers: { cookie }, payload: { name: "Real Project", generationExecutionMode: "offline-demo" } });
-  assert.equal(updated.statusCode, 400);
-  await app.inject({ method: "PATCH", url: `/api/projects/${project.id}`, headers: { cookie }, payload: { name: "Real Project" } });
-  assert.equal((await read()).json().generationExecutionMode, "provider");
-});
-
 test("retired history restore endpoint returns 404 without changing workspace", async () => {
   const { app, authStore } = await createTestApp();
   const owner = await registerUser({ authStore, username: "history_owner", displayName: "History Owner" });
@@ -136,32 +111,6 @@ test("retired history restore endpoint returns 404 without changing workspace", 
   assert.equal(response.statusCode, 404);
   assert.deepEqual(await authStore.getProjectWorkspace(project.id), before);
   await app.close();
-});
-
-test("workspace reads reject obsolete persisted artifacts without rewriting storage", async (t) => {
-  const { app, authStore } = await createTestApp();
-  t.after(() => app.close());
-  const owner = await registerUser({ authStore, username: "invalid_workspace", displayName: "Owner" });
-  const project = await createProject({ app, cookie: owner.cookie });
-  const state = { rules: [], models: { usecase: { diagramKind: "usecase", title: "obsolete" } } };
-  await authStore.saveProjectWorkspace({ projectId: project.id, baseVersion: 0, state, updatedByUserId: owner.user.id });
-  const before = structuredClone(await authStore.getProjectWorkspace(project.id));
-  const response = await app.inject({ method: "GET", url: `/api/projects/${project.id}/workspace`, headers: { cookie: owner.cookie } });
-  assert.equal(response.statusCode, 409);
-  assert.equal(response.json().error.code, "RESOURCE_CONFLICT");
-  assert.deepEqual(await authStore.getProjectWorkspace(project.id), before);
-});
-
-test("workspace writes reject obsolete non-model payloads even when rules are omitted", async (t) => {
-  const { app, authStore } = await createTestApp();
-  t.after(() => app.close());
-  const owner = await registerUser({ authStore, username: "invalid_facts", displayName: "Owner" });
-  const project = await createProject({ app, cookie: owner.cookie });
-  for (const state of [{ requirementBaseline: { requirements: [] } }, { feasibilityImplementationPlan: { architecture: {} } }]) {
-    const response = await app.inject({ method: "PUT", url: `/api/projects/${project.id}/workspace`, headers: { cookie: owner.cookie }, payload: { baseVersion: 0, state } });
-    assert.equal(response.statusCode, 400);
-    assert.equal((await authStore.getProjectWorkspace(project.id)).version, 0);
-  }
 });
 
 test("project governance actions archive restore retention and transfer ownership with audit", async () => {
@@ -236,121 +185,6 @@ test("project governance actions archive restore retention and transfer ownershi
     ],
   );
 
-  await app.close();
-});
-
-test("project workspace persists shared state with optimistic version conflicts", async () => {
-  const { app, authStore } = await createTestApp();
-  const owner = await registerUser({
-    authStore,
-    username: "workspace_owner",
-    displayName: "Workspace Owner",
-  });
-  const viewer = await registerUser({
-    authStore,
-    username: "workspace_viewer",
-    displayName: "Workspace Viewer",
-  });
-  const project = await createProject({ app, cookie: owner.cookie, name: "Workspace Project" });
-  authStore.createMember({
-    projectId: project.id,
-    userId: viewer.user.id,
-    username: viewer.user.username,
-    displayName: viewer.user.displayName,
-    role: "viewer",
-    status: "active",
-    invitedByUserId: owner.user.id,
-    invitedAt: new Date().toISOString(),
-    joinedAt: new Date().toISOString(),
-  });
-
-  const initial = await app.inject({
-    method: "GET",
-    url: `/api/projects/${project.id}/workspace`,
-    headers: { cookie: owner.cookie },
-  });
-  assert.equal(initial.statusCode, 200);
-  assert.equal(initial.json().version, 0);
-  assert.deepEqual(initial.json().state.requirementText, "");
-
-  const saved = await app.inject({
-    method: "PUT",
-    url: `/api/projects/${project.id}/workspace`,
-    headers: { cookie: owner.cookie },
-    payload: {
-      baseVersion: 0,
-      state: {
-        requirementText: "FR1. 日历仅供公众使用。",
-        rules: [{ id: "FR1", text: "日历仅供公众使用。", type: "business-rule" as const,  }],
-        selectedDiagramTypes: ["usecase"],
-      },
-      sourceRunId: "run-requirements-1",
-    },
-  });
-  assert.equal(saved.statusCode, 200);
-  assert.equal(saved.json().version, 1);
-  assert.equal(saved.json().state.requirementText, "FR1. 日历仅供公众使用。");
-  assert.equal(saved.json().updatedByUserId, owner.user.id);
-
-  const stale = await app.inject({
-    method: "PUT",
-    url: `/api/projects/${project.id}/workspace`,
-    headers: { cookie: owner.cookie },
-    payload: {
-      baseVersion: 0,
-      state: { requirementText: "过期编辑" },
-    },
-  });
-  assert.equal(stale.statusCode, 409);
-  assert.equal(stale.json().error.details.currentVersion, 1);
-
-  const viewerSave = await app.inject({
-    method: "PUT",
-    url: `/api/projects/${project.id}/workspace`,
-    headers: { cookie: viewer.cookie },
-    payload: {
-      baseVersion: 1,
-      state: { requirementText: "viewer 不能保存" },
-    },
-  });
-  assert.equal(viewerSave.statusCode, 403);
-
-  const logs = await authStore.listAuditLogs();
-  assert.ok(logs.some((entry) => entry.action === "project.workspace.update"));
-
-  await app.close();
-});
-
-test("project workspace save reports invalid source run ids as bad requests", async () => {
-  const { app, authStore } = await createTestApp();
-  const owner = await registerUser({
-    authStore,
-    username: "workspace_source_owner",
-    displayName: "Workspace Source Owner",
-  });
-  const project = await createProject({ app, cookie: owner.cookie, name: "Workspace Source Project" });
-  authStore.saveProjectWorkspace = async () => {
-    const error = new Error("violates foreign key constraint");
-    Object.assign(error, {
-      code: "23503",
-      constraint: "project_workspace_states_source_run_id_fkey",
-    });
-    throw error;
-  };
-
-  const response = await app.inject({
-    method: "PUT",
-    url: `/api/projects/${project.id}/workspace`,
-    headers: { cookie: owner.cookie },
-    payload: {
-      baseVersion: 0,
-      state: { requirementText: "invalid source run" },
-      sourceRunId: "missing-run",
-    },
-  });
-
-  assert.equal(response.statusCode, 400);
-  assert.equal(response.json().error.code, "VALIDATION_FAILED");
   await app.close();
 });
 

@@ -9,6 +9,7 @@ export interface ConversationCodingHost {
     prepare?: (model: { provider: string; id: string }) => Promise<void>;
     createUI?: (base: ExtensionUIContext) => ExtensionUIContext;
     activeTool?: (tool: { id: string; name: string; arguments: Record<string, unknown> } | null) => void;
+    workspaceSelected?: () => boolean;
     extension: ExtensionFactory;
     close: () => void;
   }>;

@@ -41,6 +41,45 @@ const defaults = () => ({ projectId: "p", state: createStandardProjectState(), d
   onSend: vi.fn(async (_command: StandardCommand) => true), onCancel: vi.fn(async () => true), onFeedback: vi.fn(async () => true), onSettings: vi.fn(), onOpenDocuments: vi.fn() });
 const view = (props = defaults()) => <I18nextProvider i18n={i18n}><ProjectConversation {...props} /></I18nextProvider>;
 
+it("keeps the stop action available while waiting without a standalone loader", async () => {
+  const props = defaults();
+  props.state.run = { id: "run", operation: "chat", status: "running", startedAt: "now" };
+  props.state.conversation = [{ id: "u", role: "user", text: "生成代码", createdAt: "now", status: "completed" }];
+  const mounted = render(view(props));
+  expect(mounted.container.querySelector('[data-slot="generation-loader"]')).not.toBeInTheDocument();
+  expect(screen.queryByText("正在处理，请稍候…")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "停止生成" }));
+  expect(props.onCancel).toHaveBeenCalledOnce();
+});
+
+it("renders generated documents and images even when the assistant reply contains no text", () => {
+  const props = defaults();
+  props.state.conversation = [{ id: "a", role: "assistant", text: "", status: "completed", createdAt: "now", tools: [{ id: "doc", name: "generate_document", status: "completed", artifacts: [
+    { type: "file", url: "/api/projects/p/documents/doc-1/download", filename: "需求规格说明书.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    { type: "image", url: "data:image/png;base64,aGVsbG8=", filename: "generated.png" },
+  ] }] }];
+  const mounted = render(view(props));
+  expect(mounted.container.querySelector('[data-slot="file-root"]')).toHaveTextContent("需求规格说明书.docx");
+  expect(mounted.container.querySelector('[data-slot="file-download"]')).toHaveAttribute("href", new URL("/api/projects/p/documents/doc-1/download", window.location.href).href);
+  expect(mounted.container.querySelector('[data-slot="image-root"] img')).toHaveAttribute("src", "data:image/png;base64,aGVsbG8=");
+  mounted.unmount();
+  const reopened = render(view({ ...props, state: JSON.parse(JSON.stringify(props.state)) }));
+  expect(reopened.container.querySelector('[data-slot="file-root"]')).toHaveTextContent("需求规格说明书.docx");
+  expect(reopened.container.querySelector('[data-slot="image-root"]')).toBeInTheDocument();
+});
+
+it("renders audio and video results through File media players", () => {
+  const props = defaults();
+  props.state.conversation = [{ id: "media", role: "assistant", text: "", status: "completed", createdAt: "now", artifacts: [
+    { type: "file", url: "https://example.test/narration.wav", filename: "narration.wav", mimeType: "audio/wav" },
+    { type: "file", url: "https://example.test/demo.mp4", filename: "demo.mp4", mimeType: "video/mp4" },
+  ] }];
+  const mounted = render(view(props));
+  expect(mounted.container.querySelector('[data-slot="audio-player"] audio')).toHaveAttribute("src", "https://example.test/narration.wav");
+  expect(mounted.container.querySelector('[data-slot="video-player"] video')).toHaveAttribute("src", "https://example.test/demo.mp4");
+  expect(mounted.container.querySelectorAll('[data-slot="file-download"]')).toHaveLength(2);
+});
+
 it("keeps an unconfigured conversation editable and prompts instead of starting a command", async () => {
   patchUserSettings({ providerConfigId: "", defaultModel: "", providerModelOptions: [] });
   const props = defaults();
@@ -588,6 +627,53 @@ it("localizes the timeline labels without changing saved reply text", async () =
   expect(screen.getByText("Read diagrams")).toBeVisible();
   expect(screen.getByText("Save diagram")).toBeVisible();
   expect(screen.getByText("保留项目回复。")).toBeVisible();
+});
+
+it("shows the execution introduction before reasoning and tools, then keeps the final answer afterward", async () => {
+  const props = defaults();
+  const run = { id: "run", operation: "chat" as const, status: "running" as const, startedAt: "now" };
+  const user = { id: "u", role: "user" as const, text: "按确认范围生成模型。", status: "completed" as const, createdAt: "now" };
+  const introduction = "已确认按推荐方案生成三类模型。我先保存需求大纲，再生成图。";
+  const first = { id: "a1", role: "assistant" as const, text: introduction, reasoning: "先校验已确认的模型范围。", status: "streaming" as const, createdAt: "now" };
+  const mounted = render(view({ ...props, state: { ...props.state, run, conversation: [user, first] } }));
+  const reasoning = mounted.container.querySelector('[data-slot="reasoning-root"]')!;
+  const requested = { ...first, status: "completed" as const, tools: [{ id: "generate", name: "generate_diagrams", status: "running" as const }] };
+  mounted.rerender(view({ ...props, state: { ...props.state, run, conversation: [user, requested] } }));
+  expect(mounted.container.querySelector('[data-slot="reasoning-root"]')).toBe(reasoning);
+  await screen.findByText(introduction);
+  expect(screen.getAllByText(introduction)).toHaveLength(1);
+  expect(screen.getByText(introduction).compareDocumentPosition(reasoning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(reasoning).toContainElement(screen.getByRole("button", { name: /生成图表.*正在执行/ }));
+  const trigger = screen.getByRole("button", { name: "正在执行" });
+  await userEvent.click(trigger);
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  expect(screen.getByText(introduction)).toBeVisible();
+  const finished = { ...requested, tools: [{ ...requested.tools[0]!, status: "completed" as const }] };
+  const answer = { id: "a2", role: "assistant" as const, text: "三类模型已生成完成。", status: "completed" as const, createdAt: "now" };
+  mounted.rerender(view({ ...props, state: { ...props.state, run: { ...run, status: "completed" }, conversation: [user, finished, answer] } }));
+  expect(mounted.container.querySelector('[data-slot="reasoning-root"]')).toBe(reasoning);
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  expect(reasoning.compareDocumentPosition(screen.getByText(answer.text)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByText(introduction)).toHaveLength(1);
+  await userEvent.click(within(screen.getByText(answer.text).closest('[data-role="assistant"]') as HTMLElement)
+    .getByRole("button", { name: "重新生成回复" }));
+  expect(props.onSend).toHaveBeenCalledWith({ operation: "regenerate", messageId: "a2", expectedHeadId: "a2", language: "zh-CN" });
+});
+
+it("keeps tool-generated files after execution when their message also contains introductory text", async () => {
+  const props = defaults();
+  props.state.conversation = [{ id: "a", role: "assistant", text: "我先生成需求说明书。", status: "completed", createdAt: "now",
+    tools: [{ id: "document", name: "generate_document", status: "completed", artifacts: [
+      { type: "file", url: "/api/projects/p/documents/doc/download", filename: "需求规格说明书.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    ] }] }];
+  const mounted = render(view(props));
+  const reasoning = mounted.container.querySelector('[data-slot="reasoning-root"]')!;
+  const file = mounted.container.querySelector('[data-slot="file-root"]')!;
+  expect(screen.getByText("我先生成需求说明书。").compareDocumentPosition(reasoning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(reasoning.compareDocumentPosition(file) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByText("我先生成需求说明书。")).toHaveLength(1);
+  expect(mounted.container.querySelectorAll('[data-slot="file-root"]')).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "推理过程" })).toHaveAttribute("aria-expanded", "false");
 });
 
 it("keeps completed Agent reasoning collapsed while preserving answer actions outside it", async () => {

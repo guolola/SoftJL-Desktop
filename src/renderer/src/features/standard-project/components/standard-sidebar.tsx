@@ -1,4 +1,4 @@
-// Supplies ordinary project menu data to the same navigation renderer used by professional projects.
+// Supplies conversation artifacts and shared project settings to the navigation tree.
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
 import { ClipboardCheck, FileText, MessageSquare, Shapes, ListTree, UsersRound, Workflow, Blocks, Diamond, SquareCode, ListOrdered, TableProperties } from "lucide-react";
@@ -28,7 +28,10 @@ export function StandardSidebar({ projectId, diagrams, state, view, selectedId, 
     const label = t(`standardProject.diagramKinds.${kind}`);
     const diagramNode = (diagram: StandardDiagram): ProjectSidebarNode => ({
       key: `diagram:${diagram.id}`, label: diagramNavigationLabel(diagram), icon: <Icon className="size-4 text-muted-foreground" />,
-      status: diagram.status === "pending" ? "queued" : diagram.status,
+      // A failed attempt can still be recovered by Pi until its owning turn settles.
+      status: diagram.status === "failed" && state?.run?.status === "running"
+        && (state.run.diagramIds ?? state.run.work?.ids ?? []).includes(diagram.id) ? "running"
+        : diagram.status === "pending" ? "queued" : diagram.status,
       onSelect: () => onDiagram(diagram),
     });
     if (kind === "usecase") {
@@ -58,6 +61,6 @@ export function StandardSidebar({ projectId, diagrams, state, view, selectedId, 
   ];
   const selectedKey = section ? "" : selectedId ? `diagram:${selectedId}` : view;
   return <ProjectSidebarNavigation tree={tree} selectedKey={selectedKey} openKeys={openKeys} setOpenKeys={setOpenKeys}
-    activeProjectSection={section} includeLineage={false} includeHistory={false} onNavigateItemSelect={() => setOpenMobile(false)}
+    activeProjectSection={section} includeHistory={false} onNavigateItemSelect={() => setOpenMobile(false)}
     onOpenProjectSection={next => onNavigate(`/projects/${encodeURIComponent(projectId)}/${next}`)} />;
 }

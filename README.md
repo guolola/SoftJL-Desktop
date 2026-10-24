@@ -1,295 +1,225 @@
-<!-- 沿用原版项目首页的视觉结构，介绍独立 Windows 桌面版。 -->
-
-[SoftJL 官网](https://jianglisoftware.com) · [在线使用手册](https://jianglisoftware.com/tutorial)
-
-<p align="center">
-  <a href="https://jianglisoftware.com">
-    <img src="./resources/public/brand/uml-platform-logo.svg" width="120" height="120" alt="SoftJL 官网 Logo" />
-  </a>
-</p>
-
-<div align="center">
-
 # SoftJL Desktop
 
-<p>
-  <strong>面向毕设与课程设计的本地建模工作台</strong><br />
-  用 AI 关联需求、UML、设计、测试与说明书，提供检查与修改依据，支持自带模型<br />
-  <sub>检查覆盖 · 查看更新影响 · 梳理答辩依据</sub>
-</p>
+**基于 [Pi Coding Agent](https://github.com/earendil-works/pi) 实现的个人 Windows 本地 Coding Agent**，集成需求整理、结构化建模和说明书生成能力。在同一项目对话中阅读与修改本机代码、执行 PowerShell 命令和测试，并使用项目中的模型与文档作为实现上下文。项目数据保存在本机，模型服务由使用者自行配置（BYOK）。
 
-<p>
-  <a href="https://jianglisoftware.com"><img src="https://img.shields.io/badge/在线体验-访问平台-2563eb?style=for-the-badge" alt="在线体验" /></a>
-  <a href="https://jianglisoftware.com/tutorial"><img src="https://img.shields.io/badge/使用手册-在线阅读-0f766e?style=for-the-badge" alt="使用手册" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-7c3aed?style=for-the-badge" alt="Apache-2.0 License" /></a>
-</p>
+[下载最新版本](https://github.com/guolola/SoftJL-Desktop/releases/latest) · [全部版本与更新说明](https://github.com/guolola/SoftJL-Desktop/releases) · [更新记录](changelog.md)
 
-<p>
-  <img src="https://img.shields.io/badge/桌面版本-v0.1.0-2563eb?style=flat-square" alt="桌面版本 v0.1.0" />
-  <img src="https://img.shields.io/badge/Desktop-Electron%20%2B%20React-61dafb?style=flat-square" alt="Electron and React" />
-  <img src="https://img.shields.io/badge/API-Fastify%20%2B%20Zod-111827?style=flat-square" alt="Fastify and Zod" />
-  <img src="https://img.shields.io/badge/UML-PlantUML-f59e0b?style=flat-square" alt="PlantUML" />
-  <img src="https://img.shields.io/badge/Platform-Windows%20x64-339933?style=flat-square" alt="Windows x64" />
-</p>
+## 下载与安装
 
-> 设计有依据，修改有方向。围绕同一份需求检查模型、测试和说明书，查看修改影响，整理汇报与答辩时能讲清的设计依据。
+从 [GitHub Releases](https://github.com/guolola/SoftJL-Desktop/releases/latest) 下载适合本机的安装包。当前提供 Windows x64（Intel / AMD 64 位）版本，未提供 ARM64、macOS、Linux 或便携版。
 
-</div>
+| 下载项 | 用途 |
+| --- | --- |
+| [SoftJL-Desktop-0.1.0-windows-x64-setup.exe](https://github.com/guolola/SoftJL-Desktop/releases/download/v0.1.0/SoftJL-Desktop-0.1.0-windows-x64-setup.exe) | v0.1.0 Windows 安装程序；普通用户选择此项 |
+| [SHA256SUMS.txt](https://github.com/guolola/SoftJL-Desktop/releases/download/v0.1.0/SHA256SUMS.txt) | 同版本安装包的 SHA-256 校验值 |
+| Release 页的 Source code (zip / tar.gz) | 对应标签的源码归档，供开发者使用，不是可直接运行的程序 |
+
+1. 下载 `.exe`，运行安装向导并选择安装目录，然后启动 SoftJL Desktop。
+2. 在设置中填写自己的模型服务、API Key 和模型。项目与会话保存在本机，模型调用按供应商规则计费。
+3. 创建项目后开始对话；需要操作代码时选择本机代码目录。MCP、网页服务及开发工具按需另外配置。
+
+安装包内含 Electron、数据库、Java、PlantUML 和导出资源，使用者无需另装 Node.js、Java 或 PostgreSQL；运行代码项目的 SDK、依赖及外部 MCP 不包含在内。当前安装包未进行代码签名，Windows 可能显示发布者未知或 SmartScreen 提示；请核对下载仓库与文件校验值后再决定是否运行。
+
+可在下载目录运行 PowerShell，将输出与同一 Release 的 `SHA256SUMS.txt` 对照：
+
+```powershell
+Get-FileHash -Algorithm SHA256 .\SoftJL-Desktop-0.1.0-windows-x64-setup.exe
+```
+
+每个 Release 记录版本变化、依赖来源与使用限制。更新前退出应用并备份本地项目数据；v0.1.0 使用独立的 `desktop-v2` 数据库，旧版数据不会自动导入，见 [运行与打包](docs/development/desktop-runtime.md)。
 
 ## 项目简介
 
-**从一段系统需求，整理 UML 图、测试用例和可编辑的 Word 说明书。** 再沿来源关系检查需求变化影响了哪些项目材料，为项目评审、汇报与答辩准备依据。
+创建项目后直接描述业务、编码目标或已有代码问题，通过持续对话完成需求澄清、设计、实现与验证。可以先阅读已有项目再补充模型，也可以先整理需求和设计，再让 Agent 在选定代码目录中实现。
 
-![工程建模：包含业务校验与异常分支的提交预约时序图](docs/images/readme-sequence-zh.jpg)
+**Desktop 当前只有统一的项目对话，已不提供独立的工程建模模式。** 建模是本地 Coding Agent 的一组能力，按任务需要调用；创建项目时无需选择“快速建模 / 工程建模”，编码前也不要求走完一套工程阶段。
 
-**一个预约流程，6 个参与者、19 条消息、3 个条件分支**，展示预约成功、座位被占用及重复预约的交互。使用准备好的示例项目，在应用中文界面中实际截取。
+## 与通用 Coding Agent 的侧重点
 
-SoftJL Desktop 是面向软件类毕设与课程设计的个人本地工作台。打开即进入项目列表，无需注册登录；项目、图表、文档和历史保存在自己的电脑里，建模继续使用你配置的 OpenAI 兼容模型服务。
+SoftJL Desktop 面向既要实现代码、又要整理需求、设计图和说明书的个人开发、课程设计与毕业设计。可以直接让 Agent 修复已有工程，也可以在同一项目中先讨论需求、查看结构化设计，再继续实现和验证。
 
-快速建模适合先讨论需求、按需画图；工程建模适合分阶段完成分析与设计。两种流程都支持自带模型，名称不表示付费档位，详细对比放在下方“核心能力”。
+文件编辑、终端、网页搜索、子代理、Skills 和 MCP 已是通用 Agent 生态中的常见能力，本项目复用 Pi 与第三方实现。差异主要在于交付物的组织和业务工具：
 
-- **查看设计来源**：沿需求、模型与测试之间的关联，核对覆盖情况、解释设计依据。
-- **定位修改影响**：需求变化后，结合依赖关系与更新状态查找需要复核的材料。
-- **保留已完成成果**：失败模型可单独重试，已成功产物继续保留；任务历史展示供应商报告的实际用量。
+| 任务 | 本项目的实现 | 使用上的好处 |
+| --- | --- | --- |
+| 从需求讨论进入编码 | 同一项目对话读取已保存的业务、共享方案、长期约定与模型 | 减少在聊天、画图工具和编码助手之间重复转述背景 |
+| 生成并继续修改设计图 | 八类图表使用结构化契约保存、校验和渲染，提供元素与关系编辑及多格式导出 | 设计成为可继续编辑的项目产物，便于检查实体、交互与数据关系 |
+| 准备测试与说明书 | 专用工具生成测试用例、需求规格说明书和软件设计说明书，提供 DOCX 预览、版本与下载 | 在编码之外，也能整理评审、课程提交或项目交接需要的材料 |
+| 使用本机工程与开发环境 | Windows 图形界面选择代码目录，Pi 工具操作实际文件并执行 PowerShell | 可复用已有工程、SDK 与构建测试命令，在对话中查看实际输出 |
+| 维护个人项目与扩展 | 项目和会话本地保存，内置数据库、绘图运行时以及 MCP / Skills 管理页 | 无需部署后台；可自选模型和外部工具，按任务补充工作流 |
 
-[查看对话建模](#快速建模) · [查看完整功能对比](#核心能力) · [桌面启动](#快速开始) · [了解生成链路](#生成链路优化)
+这些设计不代表模型推理或编码正确性优于其他产品，也不保证更低费用或更快速度。模型与代码目前没有自动双向同步；生成测试用例不等于已运行测试，图表、文档和实现的一致性仍需检查。具体成本与效果取决于所选模型、工程规模和实际验证。
+
+## Pi、插件与自有实现
+
+当前锁定 [Pi](https://github.com/earendil-works/pi) 1.3.0：`@earendil-works/pi-coding-agent`、`pi-agent-core`、`pi-ai` 与 `pi-mcp`。Pi 提供 Agent 会话与工具循环、历史和压缩机制、资源加载、文件与 PowerShell 工具及 MCP 接入；SoftJL 负责把这些能力装配到 Electron 项目对话中。
+
+| 层次 | 来源与职责 |
+| --- | --- |
+| Pi 上游 | 通用 Agent 运行时、SDK、原生工具与 MCP / Code Mode / Tool Search 扩展；不属于 SoftJL 自研 |
+| 第三方 Pi 插件 | 下表五个包提供问卷、摘要策略、搜索、网页研究和子代理；随应用安装，按会话条件加载 |
+| SoftJL 自有业务实现 | 项目与会话持久化、模型与业务契约、范围校验、结构化图表生成与编辑、PlantUML 渲染装配、测试用例和 DOCX 说明书流水线 |
+| SoftJL 桌面适配 | 目录选择与续聊、Pi 交互协议到 React 的桥接、MCP / Skills 配置、凭证保存与每轮配置快照；界面也使用 assistant-ui 等第三方组件 |
+
+### 随应用安装的第三方 Pi 插件
+
+| 插件与上游 | 锁定版本 | 用途 |
+| --- | --- | --- |
+| [@juicesharp/rpiv-ask-user-question](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-ask-user-question) | 2.13.9 | 业务澄清、编码选择与模型范围问卷 |
+| [pi-custom-compaction](https://github.com/nicobailon/pi-custom-compaction) | 0.2.5 | 长会话的自定义摘要与上下文压缩策略 |
+| [pi-fff](https://github.com/ShpetimA/pi-fff) | 0.1.13 | 本机文件索引、模糊路径搜索与增强 read/grep |
+| [pi-web-access](https://github.com/nicobailon/pi-web-access) | 0.44.0 | 网页搜索、正文读取和来源信息 |
+| [@gotgenes/pi-subagents](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents) | 25.0.1 | 子代理任务、独立子会话与结果收集 |
+
+未选择代码目录时加载问卷、压缩和网页插件；选择目录后再加载 fff、子代理及原生编码工具。网页后端、凭据和本机开发依赖仍需按要求配置。当前不安装或加载 `@gotgenes/pi-permission-system`，文件与命令不提供该插件的逐次授权。
+
+SoftJL 保留三个小型依赖维护补丁，处理 fff 关闭时序、Electron ASAR 原生库路径和压缩摘要中文件操作记录的准确性；这些是对上游的局部适配。版本依据见 [package.json](package.json)，详细边界见 [集成文档](docs/integrations/agent-integrations.md)。
+
+### 内置 Skills：自有规范与参考适配
+
+新建配置共提供七项 Skill。两项核心技能由 SoftJL 维护并保持启用；五项工作流由 SoftJL 按本项目工具和契约编写，参考下列公开 Skill，默认启用，可编辑或停用。参考工作流不等于安装上游完整技能包，也不包含上游脚本。
+
+| Skill 标识 | 用途 | 来源 |
+| --- | --- | --- |
+| `uml-graduation-modeling` | 八类图表的范围、业务语义与结构化模型规范 | [SoftJL 核心技能](src/main/modeling/runs/pipelines/standard/resources/skills/uml-graduation-modeling/SKILL.md)，含 UML 规范参考 |
+| `graduation-deliverables` | 测试用例、需求规格说明书与软件设计说明书 | [SoftJL 核心技能](src/main/modeling/runs/pipelines/standard/resources/skills/graduation-deliverables/SKILL.md) |
+| `requirements-discovery` | 需求澄清与验收条件 | SoftJL 适配；参考 [GitHub Copilot PRD](https://github.com/github/awesome-copilot/tree/main/skills/prd) |
+| `document-collaboration` | 说明书协作与检查 | SoftJL 适配；参考 [Anthropic doc-coauthoring](https://github.com/anthropics/skills/tree/main/skills/doc-coauthoring) |
+| `codebase-architecture` | 已有工程架构分析 | SoftJL 适配；参考 [GitHub Copilot architecture-blueprint-generator](https://github.com/github/awesome-copilot/tree/main/skills/architecture-blueprint-generator) |
+| `database-impact` | 数据库变更影响分析 | SoftJL 适配；参考 [GitHub Copilot sql-object-impact-analysis](https://github.com/github/awesome-copilot/tree/main/skills/sql-object-impact-analysis) |
+| `web-acceptance` | 网页流程验收 | SoftJL 适配；参考 [Anthropic webapp-testing](https://github.com/anthropics/skills/tree/main/skills/webapp-testing) |
+
+Skill 是按需读取的工作指导，不会自动赋予工具权限或安装其所需服务。管理页支持添加文本技能；运行时使用应用内显式配置的技能，不自动导入用户其他 Agent 的技能目录。
+
+### MCP：六项第三方服务预设
+
+内置的是连接预设与管理能力，六项服务均来自第三方，首次创建时全部关闭。应用没有捆绑这些 MCP 服务程序或 Playwright 浏览器，也不把本地建模业务工具称为自研 MCP Server。
+
+| 预设与上游 | 用途 | 配置要求 |
+| --- | --- | --- |
+| [MarkItDown / Microsoft](https://github.com/microsoft/markitdown/tree/main/packages/markitdown-mcp) | 文档转文本，读取需求资料 | Python 与 markitdown-mcp |
+| [DBHub / Bytebase](https://github.com/bytebase/dbhub) | 读取数据库结构与依赖 | Node.js、连接串与只读数据库账号 |
+| [Filesystem / MCP servers](https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem) | 读取、列出和检索工程资料 | Node.js 与明确配置的允许目录；预设只开放读取和检索 |
+| [Context7 / Upstash](https://github.com/upstash/context7) | 查询框架与依赖文档 | 网络；可选 API Key |
+| [Playwright / Microsoft](https://github.com/microsoft/playwright-mcp) | 浏览器操作与网页验收 | Node.js、可用浏览器和待测网页 |
+| [GitHub](https://github.com/github/github-mcp-server) | 读取仓库、Issue 与 PR | 网络与个人令牌；预设请求只读模式 |
+
+MCP 接入复用 Pi，SoftJL 自有部分是预设目录、配置与凭证管理、连接测试、会话装配和工具暴露约束。启用前需配置并测试；自定义服务按用户保存的配置运行。详见 [MCP 与 Skill 管理](docs/integrations/agent-integrations.md)。
 
 ## 界面预览
 
-桌面版直接进入项目列表，不需要登录注册。模型服务与工作区在应用内配置。
-
-以下五张截图均来自当前 Windows 桌面应用，使用独立演示工作区中的图书馆座位预约示例。示例对话与模型为预置数据，测试用例由示例需求和事件流生成；昵称和用户名均为 Admin。
-
-### 快速建模
-
-通过对话输入需求、查看工具执行状态，并从左侧打开已保存模型。
-
-![快速建模：中文需求对话、分层设计、业务规则与已保存模型导航](docs/images/readme-quick-modeling-zh.jpg)
-
-示例设计类图包含 **20 个类、4 个接口、2 个枚举和 21 条关系**，覆盖控制器、业务服务、仓储与领域对象，可查看属性、方法及关联。
-
-![快速建模：包含控制器、业务服务、仓储与领域对象的设计类图](docs/images/readme-quick-modeling-diagram.jpg)
-
-### 工程建模
-
-按需求、可行性、建模、测试和说明书流程逐步推进，在工作区检查模型元素与来源关系。
-
-示例预约时序图包含 **6 个参与者、19 条消息和 3 个条件分支**，展示预约成功、座位被占用及重复预约时的交互。
-
-[查看上方完整预约时序图](#项目简介)。
-
-### 测试场景与覆盖
-
-示例包含 **23 个测试用例，关联 11 条需求规则、8 个用例**，覆盖登录、座位查询、提交预约、通知、取消预约和座位维护的正常、备选及异常流程。来源映射需复核，用例需在实际系统执行；建立关联不等于测试通过。
-
-![中文测试用例：具体步骤、预期结果与需求来源映射](docs/images/readme-tests-zh.jpg)
-
-### 项目仪表盘
-
-下图为当前演示工作区的仪表盘：有 2 个示例项目，没有模型供应商调用记录，因此任务数量为 0，生成耗时显示暂无。统计取决于本地项目与实际任务记录。
-
-![仪表盘统计与产物生成耗时](docs/images/readme-dashboard.jpg)
-
-<details>
-<summary>生成耗时的统计口径</summary>
-
-**平均生成耗时**图表按产物统计：模型从子任务进入运行到产物就绪；可行性产物从对应生成阶段开始到产物就绪；说明书从正文生成阶段开始到文件生成并保存完成，包含这段期间适用的修复、审查与渲染。旧记录若只有独立生成调用的起止时间，则使用该调用边界；缺失或无效时间不计入均值，并行模型各自计时。项目列表按成功完成的整次任务计算平均耗时，从第一个阶段开始到任务完成；最近任务显示到完成、失败或取消的时长。首阶段开始前的排队等待不计入。
-
-</details>
-
-## 需求改得动，设计查得到，答辩讲得清
-
-面向软件类毕业设计、课程设计和 UML 作业，帮助学生检查需求是否落实到设计与测试、修改后哪些材料需要更新，以及汇报时怎样说明设计来源。
-
-| 你需要检查什么 | 平台如何帮助 | 可以整理的依据 |
-| --- | --- | --- |
-| 需求修改后，哪些设计要更新 | 保存并确认新规则，沿链路图查看关联产物与需更新状态 | 需求基线、来源关系与更新影响 |
-| 提交前，哪些需求缺少设计或测试依据 | 从跟踪矩阵定位缺失或待复核关系，检查正常、异常与边界测试 | 覆盖缺口与需要复核的设计内容 |
-| 图表与说明书中的描述是否一致 | 从已保存模型和设计生成说明书，对照图表检查并编辑正文 | 可编辑、可管理版本的 DOCX 说明书 |
-| 汇报或答辩时，怎样解释设计来源 | 回看需求、设计、测试的关联与任务历史 | 讲解设计选择和测试覆盖的依据 |
-
-来源连线和覆盖数量用于定位检查内容，仍需打开模型核对具体约束与行为。平台生成的测试用例需要在实际系统中执行；图表、说明书和代码的业务一致性需要人工检查与运行证据。
-
-### 可以准备哪些项目材料
-
-- **分析与设计**：需求规则、可行性分析、UML 模型与系统设计。
-- **测试与讲解依据**：测试用例、覆盖矩阵、追踪矩阵和任务记录，帮助核对自己的工作。
-- **工程文档**：可行性研究报告、需求规格说明书、软件设计说明书，支持版本管理与 DOCX 下载；支持浏览器内 DOCX 预览；下载后可用 Word 兼容编辑器修改。
-
-生成后仍需检查内容、按学校要求整理文档并验证系统运行结果。工程说明书可作为项目报告的材料，不等同于完整毕业论文。
-
-## 用图书馆座位预约系统走一遍
-
-```text
-学生登录后查询空闲座位，选择日期和时间段提交预约。
-同一学生同一时间段不能重复预约。预约成功后，系统发送通知。
-管理员可以维护座位、查看预约记录，并处理异常取消。
-```
-
-1. 创建项目并配置模型，输入需求、提取并确认规则。
-2. 完成三项可行性分析，核对系统边界、流程和实现方案。
-3. 生成需求模型，再按前置条件生成设计模型，查看来源关系。
-4. 生成测试用例并检查覆盖；生成、检查并下载三类说明书。
-5. 需求变更后按依赖顺序更新受影响产物，在实际系统中执行测试。
-
-图表与覆盖数量帮助定位检查内容，生成结果仍需人工评审。测试用例需在实际系统执行，工程说明书可作为项目报告材料。
+![项目对话与按需建模](docs/images/readme-quick-modeling-zh.jpg)
 
 ## 核心能力
 
-### 快速建模与工程建模对比
-
-✅ 表示支持，— 表示不启用；两者是建模流程，不是收费档位。想先画出几张图可以选快速建模，需要完整过程材料再选工程建模。
-
-| 能力 | 快速建模 | 工程建模 | 支持范围与说明 |
-| --- | :---: | :---: | --- |
-| 💬 持续对话整理需求 | ✅ | — | 快速建模通过对话按需生成和修改；工程建模按阶段推进 |
-| 📐 八类按需图表 | ✅ | — | 功能结构、用例、活动、架构、E-R、类、顺序、表关系 |
-| 📝 需求规则提取与确认 | 对话整理 | ✅ | 工程流程保存确认后的需求规则与来源 |
-| 🧭 三项可行性分析 | — | ✅ | 系统环境、业务与系统流程、实现方案 |
-| 🏗️ 完整需求与设计阶段 | 按需选择图种 | ✅ | 工程建模按阶段约束模型语义与前置条件 |
-| 🎨 模型编辑、校验与导出 | ✅ | ✅ | 具体图种校验与确定性 PlantUML 绘图 |
-| 🔗 工程来源追踪与变更影响 | — | ✅ | 来源映射、依赖检查、追踪矩阵与待更新提示 |
-| 🧪 测试用例 | ✅ | ✅ | 生成后仍需在实际系统执行验证 |
-| 📄 需求规格与软件设计说明书 | ✅ | ✅ | DOCX 预览、版本保存与下载 |
-| 📄 可行性研究报告 | — | ✅ | 基于可行性成果生成 |
-
 ### 桌面端、社区版与官网版对比
 
-**桌面端**是本仓库的个人 Windows 应用，**社区版**是自行部署的服务，**官网版**是 [SoftJL 官网](https://jianglisoftware.com)的托管服务。沿用原版能力表的标记方式；官网能力仍取决于当前部署、账号权限和配置。
+**桌面端**是本仓库的个人 Windows 应用，定位为加入建模能力的本地 Coding Agent；**社区版**是自行部署的服务，**官网版**是 SoftJL 的托管服务。✅ 表示支持，— 表示不提供。社区版与官网版原有能力沿用原表口径；本地编码相关行比较的是直接操作使用者电脑的桌面能力。
 
 | 能力 | 桌面端 | 社区版 | 官网版 | 支持范围与说明 |
 | --- | :---: | :---: | :---: | --- |
-| 📝 需求规则提取与确认 | ✅ | ✅ | ✅ | 需求提取、来源保留、修订与规则到模型映射 |
-| 🧭 可行性分析：系统环境图 | ✅ | ✅ | ✅ | 梳理系统边界、外部角色与交互 |
-| 🧭 可行性分析：业务与系统流程图 | ✅ | ✅ | ✅ | 描述业务过程与系统处理流程 |
-| 🧭 可行性分析：实现方案 | ✅ | ✅ | ✅ | 候选方案、成本收益与风险分析 |
-| 📐 完整需求模型 | ✅ | ✅ | ✅ | 功能结构、总体业务流程、用例、领域概念、原型界面关系、部署需求、需求分析模型 |
-| 🏗️ 完整设计模型 | ✅ | ✅ | ✅ | 总体架构、用例实现、设计类、页面导航、数据库、组件关系、部署设计 |
-| 🧪 测试用例与覆盖矩阵 | ✅ | ✅ | ✅ | 正常、异常与边界场景；生成结果需在实际系统中执行验证 |
-| 📄 可行性研究报告 | ✅ | ✅ | ✅ | 生成、版本管理与 DOCX 下载 |
+| 💬 持续对话与按需建模 | ✅ | ✅ | ✅ | 桌面端统一使用项目对话，可直接编码，也可按需生成和修改八类模型 |
+| 📝 对话需求澄清与项目约定 | ✅ | ✅ | ✅ | 桌面端保存对话、共享方案与长期约定，编码时可继续读取 |
+| 📝 工程需求规则提取与基线确认 | — | ✅ | ✅ | 独立规则、来源保留、修订与规则到模型映射；桌面端已移除该工程流程 |
+| 🧭 可行性分析：系统环境图 | — | ✅ | ✅ | 工程阶段产物；桌面端不提供独立可行性流程 |
+| 🧭 可行性分析：业务与系统流程图 | — | ✅ | ✅ | 工程阶段产物；桌面端仍可按需生成八类模型中的业务流程图 |
+| 🧭 可行性分析：实现方案 | — | ✅ | ✅ | 工程阶段的候选方案、成本收益与风险分析 |
+| 📐 八类按需图表 | ✅ | ✅ | ✅ | 功能结构、用例、业务流程、总体架构、概念 E-R、设计类、时序和数据库表关系 |
+| 📐 工程建模：完整需求模型 | — | ✅ | ✅ | 包含领域概念、原型界面关系、部署需求等阶段专用产物，不等同于八类按需图表 |
+| 🏗️ 工程建模：完整设计模型 | — | ✅ | ✅ | 包含用例实现、页面导航、组件关系、部署设计等阶段专用产物 |
+| 🧪 测试用例生成 | ✅ | ✅ | ✅ | 生成测试步骤、预期结果与分类；生成用例本身不表示程序测试通过 |
+| 🧪 工程测试覆盖矩阵 | — | ✅ | ✅ | 工程覆盖检查；桌面端已移除覆盖矩阵 |
+| 📄 可行性研究报告 | — | ✅ | ✅ | 桌面端不提供该报告及其前置分析流程 |
 | 📄 需求规格说明书 | ✅ | ✅ | ✅ | 生成、版本管理与 DOCX 下载 |
 | 📄 软件设计说明书 | ✅ | ✅ | ✅ | 生成、版本管理与 DOCX 下载 |
-| 👁️ 内置 DOCX 预览与下载 | ✅ | ✅ | ✅ | 在浏览器预览生成结果，下载后使用 Word 兼容编辑器修改 |
-| 🎨 图表编辑与导出 | ✅ | ✅ | ✅ | PlantUML 编辑与 SVG 导出 |
-| 🔗 来源追踪与变更影响 | ✅ | ✅ | ✅ | 查看产物来源、依赖关系与版本变化 |
-| 👥 成员、角色与邀请 | — | ✅ | ✅ | 桌面端仅个人使用；社区版与官网版保留账户和项目权限 |
-| ⏱️ 生成任务、历史与重试 | ✅ | ✅ | ✅ | 查看运行记录并重试失败任务 |
-| 🤖 自带模型服务（BYOK） | ✅ | ✅ | ✅ | OpenAI 兼容供应商、模型发现与连接测试；调用费用由模型供应商结算 |
+| 👁️ 内置 DOCX 预览与下载 | ✅ | ✅ | ✅ | 预览生成结果，下载后可使用 Word 兼容编辑器修改 |
+| 🎨 图表编辑与导出 | ✅ | ✅ | ✅ | 桌面端支持结构化元素与关系编辑，以及 SVG、PNG、PDF 和 PlantUML 下载 |
+| 🔗 工程来源追踪与变更影响 | — | ✅ | ✅ | 桌面端已移除来源追踪矩阵、依赖与变更影响审核页面 |
+| 💻 本地 Coding Agent 与代码目录 | ✅ | — | — | 在使用者选定的本机目录读取、创建和修改文件，可处理已有代码项目 |
+| 🛠️ 本机 PowerShell、构建与测试 | ✅ | — | — | 执行真实命令并展示输出；编译器、SDK 与项目依赖由本机提供 |
+| 🧩 建模上下文直接用于本机编码 | ✅ | — | — | 同一 Pi 会话读取已保存的需求、模型、测试用例和说明书，再据此实现或修改代码 |
+| 🔎 本机 fff 代码搜索 | ✅ | — | — | 选择代码目录后启用索引、文件定位和增强 read/grep |
+| 🌐 桌面内置网页搜索与读取扩展 | ✅ | — | — | 集成网页研究与来源展示；网页服务仍需按要求配置 |
+| 🤝 本机编码子代理 | ✅ | — | — | 子代理执行任务，回传结果和权限请求；并发与轮次由扩展配置管理 |
+| 🛑 本机任务停止与询问取消 | ✅ | — | — | 可停止本轮任务或取消问卷；不提供逐工具授权，停止保留已完成的修改 |
+| 🔌 桌面 MCP 与 Skills 设置 | ✅ | — | — | 在应用中管理外部工具和技能；运行环境与服务凭证按需配置 |
+| 👥 成员、角色与邀请 | — | ✅ | ✅ | 桌面端面向个人使用，无团队协作入口 |
+| ⏱️ 生成任务、历史与重试 | ✅ | ✅ | ✅ | 保存运行记录并重试失败项；桌面端还保留 Pi 会话与工具记录，支持上下文压缩和重启续聊 |
+| 🤖 自带模型服务（BYOK） | ✅ | ✅ | ✅ | OpenAI 兼容模型服务；调用费用由模型供应商结算 |
 | ☁️ 官网托管模型 | — | — | ✅ | 按账号可用配置、模型目录与生成权益使用 |
-| 💳 平台账单、支付与生成次数 | — | — | ✅ | 购买、订单与权益管理；社区版无需购买平台生成次数 |
+| 💳 平台账单、支付与生成次数 | — | — | ✅ | 桌面端与社区版无需购买平台生成次数，模型调用仍产生供应商费用 |
 | 🛠️ 运营管理后台 | — | — | ✅ | 官网运营人员使用，普通账号不开放 |
-| 📦 开源源码与独立运行 | ✅ | ✅ | — | 桌面版生成 Windows 安装包；社区版自行部署服务 |
-| 🌐 免部署在线使用 | — | — | ✅ | 直接访问官网，由平台维护托管服务 |
+| 📦 开源源码与独立运行 | ✅ | ✅ | — | 桌面端生成 Windows 安装包；社区版自行部署服务 |
+| 🌐 免部署在线使用 | — | — | ✅ | 官网提供托管服务 |
 | 🪟 Windows 独立安装包 | ✅ | — | — | 内含数据库、Java、PlantUML 与导出资源 |
-| 🏠 本地免登录、数据落盘 | ✅ | — | — | 打开项目列表直接使用，无团队邀请与密码入口 |
+| 🏠 本地免登录、数据落盘 | ✅ | — | — | 打开项目列表直接使用，项目数据保存在本机；外部模型与 MCP 仍会接收调用所需上下文 |
 
-## 生成链路优化
+### 优势与限制
 
-生成流程重点优化等待时间，减少重复模型输入。
+| 优势 | 对应限制与使用成本 |
+| --- | --- |
+| 需求、模型、文档和本地代码在同一对话中协作，减少手工转述设计 | 生成内容与代码仍需人工检查；模型与代码之间没有自动双向同步或完整追踪保证 |
+| 能读取真实工程、修改文件并运行实际验证 | 依赖本机开发环境；命令使用当前用户权限，代码目录不构成系统沙箱；停止任务不会自动回滚文件 |
+| 个人数据本地保存，安装包内置数据库和绘图运行时，无需部署后台服务 | 当前面向个人 Windows x64 使用，无团队协作入口；调用外部模型或 MCP 时，相关上下文仍会发送给对应服务 |
+| 可自选模型服务，本地不设置 LLM 请求并发上限 | 需自行承担模型调用费用和供应商限流；子代理仍遵循其扩展配置，并行调用会增加资源与额度消耗 |
+| 可按需建模，也可直接进入编码，适合已有项目迭代 | 已移除工程建模模式；需要需求基线、可行性流程、覆盖矩阵和变更影响审核时，当前 Desktop 无法提供完整流程 |
+| 可扩展 MCP、Skills、网页研究与子代理工具 | 外部服务的账号、凭证、运行环境和可用性需要自行维护；已安装扩展不代表其依赖服务已配置完成 |
 
-- **按依赖组织上下文**：仅携带当前任务来源；单用例生成保留目标及 include/extend 等依赖，业务约束与完整目标模型继续保留。
-- **按任务持续修复模型**：生成和渲染阶段沿用同一会话并共享五次修复上限，模型、来源与绘图校验通过后一起发布；实现方案和文档章节保留局部补丁协议。
-- **并行推进与失败项重试**：独立设计分支并行处理，重试失败模型实例时保留已成功成果。
-- **普通版与专业版项目**：普通版通过持续对话按需生成图表；专业版保留需求、可行性、设计、测试和追踪的完整流程。两者均支持自带模型，名称不表示付费档位。
-- **展示实际消耗**：任务历史汇总供应商报告的输入、输出、缓存等 Token，包含适用的修复与失败调用，缺失用量不补造。
-- **内置文档预览**：直接预览 DOCX，无需单独部署文档服务器。
-
-实际总耗时和 Token 受项目规模、模型、供应商延迟及修复次数影响；任务历史展示实际报告的用量，不补造缺失数据。
+![结构化设计模型与图形预览](docs/images/readme-quick-modeling-diagram.jpg)
 
 ## 快速开始
 
-### 1. 准备环境
+使用安装包请先看 [下载与安装](#下载与安装)；以下步骤适用于首次启动后的使用。
 
-桌面版当前面向 Windows x64。源码开发使用 Node.js 24 LTS 与 npm；使用打好的安装包无需另装 Node.js、PostgreSQL 或 Redis。
+1. 打开应用，在设置中配置模型服务、API Key 和可用模型。
+2. 创建项目，填写名称和业务描述；需要编码时可同时选择项目代码目录。
+3. 在聊天中提出具体任务，例如“阅读这个项目并修复问题”或“整理需求，生成类图并实现接口”；生成模型时按询问确认范围。
+4. 编码时查看实际文件修改与验证输出；尚未设置代码目录时，可按对话提示选择文件夹并继续，执行中可停止本轮任务。
+5. 从侧栏查看已生成的图表、测试和说明书，在原对话中继续修改。代码目录也可在项目设置中选择或更换。
 
-### 2. 安装依赖并启动
-
-~~~powershell
-npm ci
-node scripts/prepare-runtime.mjs
-npm run dev
-~~~
-
-首次构建会下载所需 Java 运行时与 PDF 中文字体。应用启动直接到项目列表，数据持续保存在当前 Windows 用户的应用数据目录中。
-
-### 3. 配置模型
-
-点击应用设置按钮，配置模型服务地址、API Key 与模型。创建快速建模或工程建模项目，描述需求并生成、保存设计与文档。模型调用费用由供应商账户结算。
-
-### 4. 打包成安装程序
-
-~~~powershell
-npm run package
-~~~
-
-安装包输出至 release，包含 Electron、内嵌数据库、Java、PlantUML 和导出资源，当前未配置发行签名。参见 [桌面运行与打包](docs/development/desktop-runtime.md)。
-
-## 技术架构
-
-~~~mermaid
-flowchart LR
-  A[需求文本] --> B[确认的需求规则]
-  B --> C[可行性分析]
-  B --> D[需求模型]
-  D --> E[设计模型]
-  E --> F[测试与覆盖]
-  C --> G[工程说明书]
-  D --> G
-  E --> G
-~~~
-
-| 目录 | 职责 |
-| --- | --- |
-| src/main | Electron 窗口、本地后台、建模流水线、渲染和文档 |
-| src/preload | 受限原生操作桥接 |
-| src/renderer | 桌面窗口与 React 建模界面 |
-| src/shared | 共享契约、桥接类型与演示数据 |
-| resources | 静态资源、图标与 PlantUML |
-| scripts、tests | 构建、运行时准备与应用验证 |
+模型调用费用由供应商账户结算。运行中的会话可以停止；停止不会撤销已经完成的文件修改。
 
 ## 常用命令
 
-| 命令 | 用途 |
-| --- | --- |
-| `npm run dev` | 构建并启动桌面应用 |
-| `npm run build` | 构建主进程、preload 与界面，准备导出资源 |
-| `npm run package` | 生成独立 Windows x64 安装包 |
-| `npm run typecheck` | 检查主进程、共享契约与界面类型 |
-| `npm run test:desktop` | 验证桌面窗口、本地数据与接口边界 |
-| `npm run test:modeling` | 验证建模、修复、导出等业务 |
-| `npm run test:renderer` | 验证界面与交互守卫 |
-| `npm run smoke` | 用隔离数据检查真实 Electron 启动、渲染与保存 |
-| `npm run audit:docs` | 检查文档命名、结构和链接 |
+源码开发推荐 Node.js 24 LTS（最低要求见 `package.json`），并准备 Windows 桌面开发环境。
 
-> 本地数据、密钥、运行时缓存、安装包与构建输出保持 Git 忽略。启动检查不调用真实模型。
+```powershell
+npm ci
+node scripts/prepare-runtime.mjs
+npm run dev
+```
 
-## 开发碎碎念
+常用验证与打包命令：
 
-最开始做这个，其实就是想让学生做课设的时候少折腾一点。需求要写，图要画，说明书还得整理成一套，来回改几轮，时间很容易花在“这张图改了，另一份材料是不是也要跟着改”上。
+```powershell
+npm run typecheck
+npm run test:desktop
+npm run test:modeling
+npm run test:renderer
+npm run audit:docs
+npm run build
+npm run package
+```
 
-所以一开始只做了工程建模，想把前后的关系都串起来。结果做着做着发现，我觉得顺手的流程，别人第一次打开未必看得懂。有人只是想画张用例图，却先看到一堆阶段、规则和依赖，第一反应就是：怎么这么复杂，我还没开始呢。
+数据、缓存、生成文件及凭证不加入源码版本控制。当前使用独立的 `desktop-v2` 数据目录，旧版数据不会自动读取、迁移或删除；当前目录的 Schema 不兼容时会明确拒绝打开。
 
-后来就补了快速建模。先聊清楚想做什么，需要哪张图就画哪张，哪里不对再接着改。要认真整理完整材料的时候，工程建模也还在。没必要让每一次小作业都先走一遍完整流程。
+## 技术架构
 
-桌面版也是顺着这个想法做的：自己的项目放自己电脑里，打开就能用，设计做好了还能接着让本地助手写代码。希望省下来的时间，能多留一点给真正理解自己的系统。图和文档毕竟只是工具，答辩时能讲清楚“为什么这么设计”，还是得靠自己。
+- `src/main`：Windows 原生能力、本地后台与项目会话运行时。
+- `src/preload`：受控的原生桥接。
+- `src/renderer`：React 应用、项目聊天与产物界面。
+- `src/shared`：模型、项目、文档与桥接契约。
 
 ## 文档导航
 
-- [桌面运行与打包](docs/development/desktop-runtime.md)
-- [架构与进程边界](docs/architecture/platform-overview.md)
-- [模型服务接入](docs/integrations/openai-compatible-provider.md)
-- [文档索引](docs/README.md)
-- [贡献指南](contributing.md)
-- [安全边界](security.md)
+- [项目文档](docs/README.md)
+- [桌面架构](docs/architecture/platform-overview.md)
+- [建模能力](docs/architecture/modeling-capabilities.md)
+- [运行与打包](docs/development/desktop-runtime.md)
+- [MCP 与 Skill 管理](docs/integrations/agent-integrations.md)
+- [版本更新记录](changelog.md)
+- [协作规范](AGENTS.md)
 
 ## 授权
 
-<div align="center">
-
-**Copyright © 2026 软件工程实践平台 · Apache-2.0**
-
-本项目自有代码与文档采用 [Apache License 2.0](LICENSE)，允许商业使用、修改和再分发，也允许闭源修改与分发，但须遵守保留许可与相关声明、标明修改等协议条件。
-
-第三方模板、依赖、字体、图标及 PlantUML 运行时保留各自的版权与许可，不因本项目协议变更而重新授权。相关声明与许可位置见 [NOTICE](NOTICE)；再分发时还须遵守对应组件的许可条件。
-
-</div>
+本项目采用 [Apache-2.0](LICENSE)。引用的组件、图标、字体和集成包保留各自的许可证。

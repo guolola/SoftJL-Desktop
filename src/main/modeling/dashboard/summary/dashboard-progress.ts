@@ -5,21 +5,16 @@ type ProgressDocument = Pick<DocumentLibraryItem, "status" | "documentKind">;
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
-function present(value: unknown) { return Object.keys(record(value)).length > 0; }
 
 export function buildDashboardProgress(state: Record<string, unknown>, documents: ProgressDocument[]): NonNullable<DashboardSummary["projects"][number]["progress"]> {
   const generated = new Set<string>();
-  // Several analysis/sequence models still represent one type. Read current outputs rather
-  // than historical task successes, which would also count removed or replaced artifacts.
-  for (const [key, stage] of [["models", "requirements"], ["designModels", "design"]]) {
-    for (const model of Object.values(record(state[key]))) {
-      const kind = record(model).diagramKind;
-      if (typeof kind === "string") generated.add(`${stage}:${kind}`);
-    }
+  const conversation = record(state.standardProject);
+  for (const diagram of Object.values(record(conversation.diagrams))) {
+    const item = record(diagram), model = record(item.model);
+    if (item.status !== "completed" || model.diagramKind !== item.kind || typeof item.svg !== "string" || !item.svg.trim()) continue;
+    const stage = ["function", "usecase", "activity"].includes(String(item.kind)) ? "requirements" : "design";
+    generated.add(`${stage}:${item.kind}`);
   }
-  if (present(state.feasibilityContextModel)) generated.add("feasibility:context");
-  if (present(record(state.feasibilityBusinessFlow).model)) generated.add("feasibility:business-flow");
-  if (present(state.feasibilityImplementationPlan)) generated.add("feasibility:implementation");
   for (const document of documents) if (document.status !== "deleted") generated.add(`document:${document.documentKind}`);
   const stages = dashboardProgressStages.map(kind => {
     const types = dashboardProgressArtifactTypes.filter(type => type.startsWith(`${kind}:`));

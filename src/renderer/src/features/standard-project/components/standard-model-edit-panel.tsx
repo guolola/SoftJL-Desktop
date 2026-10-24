@@ -1,4 +1,4 @@
-// Reuses structural editors without engineering review or dependency workflows.
+// Edits the saved structured models produced by project conversations.
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { standardModelStage, validateStandardModel, type StandardDiagram, type StandardModel } from "../../../../../shared/contracts/index.js";

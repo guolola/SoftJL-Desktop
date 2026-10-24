@@ -5,7 +5,6 @@ import {
 } from "../adapters/llm/llm-transport.js";
 import {
   createInMemoryLlmScheduler,
-  createLlmSchedulerLimitsFromEnv,
   type LlmScheduler,
 } from "../adapters/llm/llm-scheduler.js";
 import {
@@ -46,7 +45,7 @@ export function createApiExternalAdapters(
     createRealLlmTransport();
   const llmScheduler =
     overrides.llmScheduler ??
-    createInMemoryLlmScheduler(createLlmSchedulerLimitsFromEnv());
+    createInMemoryLlmScheduler();
   const renderServiceBaseUrl =
     overrides.renderServiceBaseUrl ?? DEFAULT_RENDER_SERVICE_BASE_URL;
   const renderClient: RenderClient =

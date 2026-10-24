@@ -5,7 +5,6 @@ import { useTranslation } from "react-i18next";
 import { i18n as appI18n } from "../../../shared/i18n/i18n.js";
 import { sanitizeSvgMarkup } from "../lib/svg-sanitizer.js";
 import { svgIntrinsicSize } from "../lib/svg-intrinsic-size.js";
-import { localizeDiagramText } from "../lib/diagram-display-language.js";
 
 function parseSvgLength(value: string | null) {
   if (!value) return null;
@@ -65,8 +64,7 @@ export function InlineSvg({
     : appI18n.t.bind(appI18n);
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string>("");
-  const baselineLabel = t("uxReview.baseline");
-  const sanitizedSvg = useMemo(() => localizeDiagramText(sanitizeSvgMarkup(svg), baselineLabel), [svg, baselineLabel]);
+  const sanitizedSvg = useMemo(() => sanitizeSvgMarkup(svg), [svg]);
   const intrinsicWidth = useMemo(
     () => (sizing === "intrinsic" ? svgIntrinsicSize(sanitizedSvg)?.width ?? null : null),
     [sanitizedSvg, sizing],

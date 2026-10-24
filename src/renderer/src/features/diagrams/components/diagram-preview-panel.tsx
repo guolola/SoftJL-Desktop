@@ -31,7 +31,8 @@ type DiagramPreviewError = {
 } | null;
 
 type DiagramPreviewPanelProps = {
-  stage: "requirements" | "design" | "feasibility";
+  projectId: string;
+  stage: "requirements" | "design";
   type: DiagramType | DesignDiagramType;
   exportFileStem?: string;
   diagramId?: string;
@@ -70,6 +71,7 @@ export function DiagramPreviewPanel({
   stage,
   type,
   exportFileStem,
+  projectId,
   diagramId,
   plantUmlSource,
   normalizedSvgMarkup,
@@ -163,7 +165,7 @@ export function DiagramPreviewPanel({
               )}
             </>
           ) : null}
-          <DiagramDownloadMenu diagramKind={type} diagramId={diagramId} fileStem={fileStem} svg={normalizedSvgMarkup} source={plantUmlSource} />
+          <DiagramDownloadMenu projectId={projectId} diagramKind={type} diagramId={diagramId} fileStem={fileStem} svg={normalizedSvgMarkup} source={plantUmlSource} />
         </div>
       </div>
       <div className="relative">

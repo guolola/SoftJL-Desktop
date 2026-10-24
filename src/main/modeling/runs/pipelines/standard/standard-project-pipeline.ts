@@ -1,4 +1,4 @@
-// Coordinates ordinary clarification and parallel diagrams from one shared outline, with structure-only repair.
+// Generates and validates one diagram attempt per call; the Pi Agent owns content recovery.
 import { z } from "zod";
 import {
   standardDiagramTasks, standardTestsSchema, validateStandardModel,
@@ -6,7 +6,6 @@ import {
   type DocumentStyleSettings, type ProviderSettings, type StandardProjectState, type StandardAnswer, type StandardDiagram, type StandardAttachment, type StandardOperation,
 } from "../../../../../shared/contracts/index.js";
 import type { LlmTransport } from "../../../adapters/llm/llm-transport.js";
-import { createLlmSchedulerLimitsFromEnv } from "../../../adapters/llm/llm-scheduler.js";
 import type { RenderClient } from "../../../adapters/render/render-client.js";
 import { buildStandardDiagram } from "../../../normalizers/standard/diagram-source.js";
 import { zodToJsonSchema } from "zod-to-json-schema";
@@ -18,6 +17,7 @@ import { selectedStandardTasks } from "./standard-generation-scope.js";
 import { assertStandardDiagramSubstitutionAllowed } from "./standard-diagram-support.js";
 import { withRunReasoning } from "../shared/run-reasoning.js";
 import { standardTaskGuidance, type StandardGuidanceTask } from "./standard-modeling-knowledge.js";
+import { standardQuestionAnswers, isStandardModelQuestion } from "./standard-user-questions.js";
 
 export type StandardCommand = { operation: StandardOperation; requestId?: string; answers?: StandardAnswer[]; useRecommendations?: boolean; diagramId?: string; message?: string; targetIds?: string[]; instruction?: string; documentStyle?: DocumentStyleSettings;
   reasoning?: boolean; attachments?: StandardAttachment[]; quote?: { text: string; messageId?: string };
@@ -26,16 +26,21 @@ export type StandardPipelineDependencies = { transport: LlmTransport; settings: 
   publishDocument?: (state: StandardProjectState, kind: "requirementsSpec" | "softwareDesignSpec") => Promise<string>;
   save: (update: (state: StandardProjectState) => void) => Promise<StandardProjectState> };
 
-// Capture durable facts once per operation so parallel workers and repairs agree,
+// Capture durable facts once per operation so parallel diagram attempts agree,
 // even when the Pi conversation has been compacted or the outline omitted an answer.
 export function projectFacts(state: StandardProjectState) {
   return structuredClone({
     memory: state.memory ?? [],
-    clarifications: state.rounds.filter(round => round.purpose !== "generation_scope").flatMap((round, roundIndex) =>
+    clarifications: [...state.rounds.filter(round => round.purpose !== "generation_scope").flatMap((round, roundIndex) =>
       round.answers.flatMap(answer => {
         const question = round.questions.find(question => question.id === answer.questionId);
         return question ? [{ round: roundIndex + 1, question: question.title, answer: answer.answer }] : [];
       })),
+      // Pi retains answers in tool history; independent diagram calls need those same confirmed facts.
+      ...(state.conversation ?? []).flatMap(message => (message.tools ?? []).flatMap(tool =>
+        tool.name === "ask_user_question" && tool.status === "completed"
+          ? standardQuestionAnswers(tool.arguments, tool.data).filter(answer => !isStandardModelQuestion(answer.options) && answer.answer)
+            .map(answer => ({ question: answer.question, answer: answer.answer })) : []))],
   });
 }
 const modelGuide = "严格按本图 JSON Schema 返回完整结构，包括 diagramKind、title、summary、notes。所有标识和引用合法；保留已确认业务及目标范围，不返回 PlantUML 或 SVG，不添加来源规则、依赖追踪或无依据的 sourceRequirementIds 等来源字段。用例角色沿用共享方案角色 ID。表模型以 relationalConstraints 为键约束依据，派生标记和连线由平台维护。";
@@ -97,61 +102,51 @@ export async function runStandardProject(command: StandardCommand, initial: Stan
     if (!tasks.length) { if (command.operation === "resume") return; throw new Error("找不到需要重试的图"); }
     await deps.save(state => {
       // Keep the exact requested scope and revision instruction for an explicit continuation.
-      if (state.run) state.run.work = { ids: tasks.map(task => task.id), instruction: command.instruction };
+      if (state.run) {
+        state.run.work = { ids: tasks.map(task => task.id), instruction: command.instruction };
+        // Track the whole turn independently of the latest continuation checkpoint.
+        state.run.diagramIds = [...new Set([...(state.run.diagramIds ?? []), ...tasks.map(task => task.id)])];
+      }
       for (const task of tasks) state.diagrams[task.id] = { ...task, status: "pending", error: undefined };
     });
-    let index = 0;
-    const worker = async () => {
-      while (index < tasks.length) {
-        const task = tasks[index++]!;
-        await deps.save(state => { state.diagrams[task.id] = { ...task, status: "running", phase: "generating", error: undefined }; });
-        try {
-          let raw: unknown; let failure = "";
-          // One bounded repair for invalid structure; rendering failures never trigger content/visual review.
-          for (let attempt = 0; attempt < 2; attempt++) {
-            let received = false;
-            try {
-              if (attempt) await deps.save(state => { state.diagrams[task.id]!.phase = "repairing"; });
-              const schema = standardModelSchemaForKind(task.kind);
-              const activityBusiness = task.kind === "activity" ? outline.businesses.find(item => item.id === task.businessId) : undefined;
-              const activityLaneRules = activityBusiness
-                ? (() => {
-                    const roleIds = [...new Set(activityBusiness.roleIds)];
-                    const roleLanes = roleIds.map(roleId => {
-                      const role = outline.roles.find(item => item.id === roleId);
-                      return role ? { id: `role_${role.id}`, name: role.name } : undefined;
-                    }).filter((lane): lane is { id: string; name: string } => Boolean(lane));
-                    const lanes = [{ id: "system", name: "目标系统" }, ...roleLanes];
-                    return `本图必须使用 UML 泳道活动图，model.swimlanes 必须包含以下泳道：${JSON.stringify(lanes)}。每个 activity 节点都必须设置 actorOrLane；目标系统自动处理归属 system，人员操作归属对应 role_<角色ID>。每条泳道至少要有一个 activity，不要把所有动作都放入同一泳道；start/end 可不指定泳道。`;
-                  })()
-                : "";
-              raw = await standardJsonCall(deps, `根据共享方案生成 ${task.title}。${activityLaneRules}\n${modelGuide}`, {
-                outline, description: initial.description, task, ...facts,
-                ...(command.instruction ? { revisionInstruction: command.instruction, existingModel: initial.diagrams[task.id]?.model } : {}),
-                ...(failure ? { previous: raw, structuralError: failure, instruction: "仅修复结构错误" } : {}),
-              }, schema, task.kind);
-              received = true;
-              await deps.save(state => { state.diagrams[task.id]!.phase = "checking"; });
-              raw = validateStandardModel(task.kind, raw); failure = ""; break;
-            }
-            catch (error) {
-              if (!received && !(error instanceof SyntaxError)) throw error;
-              failure = error instanceof Error ? error.message : "结构错误";
-            }
-          }
-          if (failure) throw new Error(failure);
-          await deps.save(state => { state.diagrams[task.id]!.phase = "rendering"; });
-          const completed = await renderStandardDiagram({ ...task, model: raw }, deps.render);
-          await deps.save(state => { state.diagrams[task.id] = completed; });
-        } catch (error) {
-          await deps.save(state => { state.diagrams[task.id] = { ...task, status: "failed", error: error instanceof Error ? error.message : "生成失败" }; });
-        }
+    // Each selected diagram starts independently; desktop has no LLM worker cap.
+    const attempts = await Promise.all(tasks.map(async task => {
+      await deps.save(state => { state.diagrams[task.id] = { ...task, status: "running", phase: "generating", error: undefined }; });
+      let raw: unknown;
+      try {
+        // Validate once and return the real failure to Pi, without a hidden second model call.
+        const schema = standardModelSchemaForKind(task.kind);
+        const activityBusiness = task.kind === "activity" ? outline.businesses.find(item => item.id === task.businessId) : undefined;
+        const activityLaneRules = activityBusiness
+          ? (() => {
+              const roleIds = [...new Set(activityBusiness.roleIds)];
+              const roleLanes = roleIds.map(roleId => {
+                const role = outline.roles.find(item => item.id === roleId);
+                return role ? { id: `role_${role.id}`, name: role.name } : undefined;
+              }).filter((lane): lane is { id: string; name: string } => Boolean(lane));
+              const lanes = [{ id: "system", name: "目标系统" }, ...roleLanes];
+              return `本图必须使用 UML 泳道活动图，model.swimlanes 必须包含以下泳道：${JSON.stringify(lanes)}。每个 activity 节点都必须设置 actorOrLane；目标系统自动处理归属 system，人员操作归属对应 role_<角色ID>。每条泳道至少要有一个 activity，不要把所有动作都放入同一泳道；start/end 可不指定泳道。`;
+            })()
+          : "";
+        raw = await standardJsonCall(deps, `根据共享方案生成 ${task.title}。${activityLaneRules}\n${modelGuide}`, {
+          outline, description: initial.description, task, ...facts,
+          ...(command.instruction ? { revisionInstruction: command.instruction, existingModel: initial.diagrams[task.id]?.model } : {}),
+        }, schema, task.kind);
+        await deps.save(state => { state.diagrams[task.id]!.phase = "checking"; });
+        raw = validateStandardModel(task.kind, raw);
+        await deps.save(state => { state.diagrams[task.id]!.phase = "rendering"; });
+        const completed = await renderStandardDiagram({ ...task, model: raw }, deps.render);
+        await deps.save(state => { state.diagrams[task.id] = completed; });
+        return { id: task.id, title: task.title, status: "completed" as const };
+      } catch (error) {
+        const failure = error instanceof Error ? error.message : "生成失败";
+        await deps.save(state => { state.diagrams[task.id] = { ...task, status: "failed", error: failure, phase: undefined }; });
+        // Invalid candidates stay in the tool result, never in the persisted model contract.
+        return { id: task.id, title: task.title, status: "failed" as const, error: failure,
+          ...(raw !== undefined ? { candidateModel: raw } : {}) };
       }
-    };
-    // Share the engineering run budget; every provider request still passes through the global scheduler.
-    const concurrency = createLlmSchedulerLimitsFromEnv().runConcurrency;
-    await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
-    return;
+    }));
+    return attempts;
   }
   const models = Object.values(initial.diagrams).filter(item => item.status === "completed").map(({ id, kind, title, businessId, model }) => ({ id, kind, title, businessId, model }));
   if (!models.length) throw new Error("请先生成图，再生成测试或说明书");

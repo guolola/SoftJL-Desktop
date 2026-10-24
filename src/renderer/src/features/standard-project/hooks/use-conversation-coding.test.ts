@@ -46,3 +46,35 @@ it("ignores late responses belonging to a previous project", async () => {
   hook.rerender({ id: "new" }); await waitFor(() => expect(hook.result.current.status.directory).toBe("D:\\new"));
   await act(async () => { resolveOld(initial); }); expect(hook.result.current.status.directory).toBe("D:\\new");
 });
+
+it("uses the native picker to continue a request and keeps a cancelled chooser pending", async () => {
+  const approval = { id: "folder", runId: "run", toolCallId: "choose", tool: "choose_code_directory", title: "选择文件夹", directory: "", detail: "", dialog: "directory" as const };
+  const waiting = { directory: null, approvals: [approval], busy: true };
+  vi.mocked(conversationCodingApi.read).mockResolvedValue(waiting);
+  const choose = vi.mocked(window.desktop.chooseConversationDirectory);
+  const hook = renderHook(() => useConversationCoding("p"));
+  await waitFor(() => expect(hook.result.current.status.approvals).toHaveLength(1));
+  await act(async () => { await hook.result.current.selectDirectory("folder", "run"); });
+  expect(choose).toHaveBeenCalledWith("p", { approvalId: "folder", runId: "run" });
+  expect(hook.result.current.status.approvals).toHaveLength(1);
+  choose.mockResolvedValueOnce("D:\\generated");
+  vi.mocked(conversationCodingApi.read).mockResolvedValue({ directory: "D:\\generated", approvals: [], busy: true });
+  await act(async () => { await hook.result.current.selectDirectory("folder", "run"); });
+  expect(hook.result.current.status.directory).toBe("D:\\generated");
+  expect(hook.result.current.status.approvals).toEqual([]);
+  expect(conversationCodingApi.decide).not.toHaveBeenCalled();
+});
+
+it("does not apply a late native folder choice to a different project", async () => {
+  let finishChoice!: (directory: string) => void;
+  vi.mocked(window.desktop.chooseConversationDirectory).mockImplementation(() => new Promise(resolve => { finishChoice = resolve; }));
+  vi.mocked(conversationCodingApi.read).mockImplementation(id => Promise.resolve({ ...initial, directory: `D:\\${id}` }));
+  const hook = renderHook(({ id }) => useConversationCoding(id), { initialProps: { id: "old" } });
+  await waitFor(() => expect(hook.result.current.status.directory).toBe("D:\\old"));
+  let choice!: Promise<void>;
+  act(() => { choice = hook.result.current.selectDirectory("folder", "old-run"); });
+  hook.rerender({ id: "new" });
+  await waitFor(() => expect(hook.result.current.status.directory).toBe("D:\\new"));
+  await act(async () => { finishChoice("D:\\chosen-old"); await choice; });
+  expect(hook.result.current.status.directory).toBe("D:\\new");
+});

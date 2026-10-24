@@ -1,5 +1,6 @@
 // Embeds the actual Pi SDK for a persistent project conversation, tool loop, memory and context compaction.
 import { boundedToolData } from "./standard-tool-presentation.js";
+import { standardToolArtifacts } from "./standard-tool-artifacts.js";
 import { bindPiHostProvider } from "../../../adapters/llm/pi-host-stream.js";
 import { randomUUID } from "node:crypto";
 import { ModelRuntime, createAgentSession, SettingsManager } from "@earendil-works/pi-coding-agent";
@@ -18,8 +19,13 @@ import { resolveStandardGenerationSelection } from "./standard-generation-scope.
 import { appendStandardGenerationResult } from "../../records/standard-run-messages.js";
 import type { ConversationCodingHost } from "../../../adapters/coding/conversation-coding-host.js";
 
-export async function runStandardAgent(projectId: string, command: StandardCommand, initial: StandardProjectState,
-  deps: StandardPipelineDependencies & StandardAgentExtensionOptions & { stream: StreamFn; signal: AbortSignal; capacity?: ModelCapacity; codingHost?: ConversationCodingHost }) {
+type StandardAgentDependencies = StandardPipelineDependencies & StandardAgentExtensionOptions & { stream: StreamFn; signal: AbortSignal; capacity?: ModelCapacity; codingHost?: ConversationCodingHost };
+
+export async function runStandardAgent(projectId: string, command: StandardCommand, initial: StandardProjectState, deps: StandardAgentDependencies) {
+  await runStandardAgentTurn(projectId, command, initial, deps, false);
+}
+
+async function runStandardAgentTurn(projectId: string, command: StandardCommand, initial: StandardProjectState, deps: StandardAgentDependencies, resumeWithWorkspace: boolean) {
   let current = initial;
   const save: StandardPipelineDependencies["save"] = async update => { current = await deps.save(update); return current; };
   const userMessageId = standardUserMessageId(command, current);
@@ -33,14 +39,8 @@ export async function runStandardAgent(projectId: string, command: StandardComma
     // Scope describes this request, not every model ever generated; existing outputs are retained separately.
     state.generationScope = { status: "confirmed", kinds: selection };
   });
-  // Scope consent is host-enforced, while the Agent owns the questions and invokes
-  // confirm_generation_scope to render the actual interactive inquiry.
-  if (!current.generationScope && !Object.keys(current.diagrams).length) {
-    await save(state => {
-      state.generationScope = { status: "awaiting_selection", kinds: ["function", "usecase", "activity"] };
-    });
-  }
   const coding = await deps.codingHost?.open(projectId, current.run?.id ?? userMessageId, deps.signal);
+  let continueWithWorkspace = false;
   try {
   const manager = restoreStandardSession(projectId, current.piSession, coding?.cwd);
   const model = standardPiModel(deps.settings, deps.capacity);
@@ -88,6 +88,12 @@ export async function runStandardAgent(projectId: string, command: StandardComma
     return deps.stream(...args);
   };
   session.agent.toolExecution = "sequential";
+  const finishTurn = session.agent.finishTurn;
+  session.agent.finishTurn = async (...args) => {
+    const decision = await finishTurn?.(...args);
+    // Settle after the chooser's tool result so no request runs with the previous directory's tools.
+    return coding?.workspaceSelected?.() ? { action: "end" } : decision ?? undefined;
+  };
   const abort = () => { session.agent.abort(); session.abortCompaction(); };
   deps.signal.addEventListener("abort", abort, { once: true });
   const unsubscribe = session.subscribe(event => {
@@ -144,8 +150,10 @@ export async function runStandardAgent(projectId: string, command: StandardComma
       const { toolCallId, isError } = event;
       const result = event.result as { content?: Array<{ type: string; text?: string }>; details?: Record<string, unknown>; structuredContent?: { exit_code?: number; wall_time_seconds?: number; truncated?: boolean; [key: string]: unknown } };
       const output = result.content?.filter(item => item.type === "text").map(item => item.text ?? "").join("\n") ?? "";
+      const artifacts = isError ? [] : standardToolArtifacts(projectId, event.toolName, result);
       persist(state => { for (const message of state.conversation ?? []) { const tool = message.tools?.find(item => item.id === toolCallId); if (tool) {
         tool.status = isError ? "failed" : "completed";
+        if (artifacts.length) tool.artifacts = artifacts;
         // Keep readable coding results with their original tool turn, rather than exposing transport logs.
         {
           tool.data = boundedToolData(result.structuredContent ?? result.details);
@@ -172,21 +180,26 @@ export async function runStandardAgent(projectId: string, command: StandardComma
     const images = (command.attachments ?? []).filter(item => item.type === "image").map(item => ({ type: "image" as const, data: item.data, mimeType: item.contentType }));
     // The upstream command starts fire-and-forget work. The desktop run must own
     // its completion; the SDK still invokes the installed session_before_compact policy.
-    if (/^\/compact-now(?:\s|$)/.test(message)) await session.compact(message.slice("/compact-now".length).trim() || undefined);
+    if (resumeWithWorkspace) await session.sendCustomMessage({ customType: "code-workspace-selected", display: false,
+      content: "用户已通过本机选择器设置代码工作目录。继续完成上面的原始用户请求，先读取所选目录的实际文件，再生成或修改代码。" }, { triggerTurn: true });
+    else if (/^\/compact-now(?:\s|$)/.test(message)) await session.compact(message.slice("/compact-now".length).trim() || undefined);
     else await session.prompt([referenceText, message].filter(Boolean).join("\n\n"), { expandPromptTemplates: false, images });
     await writes; if (writeFailure) throw writeFailure;
     deps.signal.throwIfAborted();
     if (session.agent.state.errorMessage) throw new Error(session.agent.state.errorMessage);
-    persist(state => { state.contextStatus = "ready"; appendStandardGenerationResult(state); }); await writes;
-    if (writeFailure) throw writeFailure;
-    // Follow-ups are optional: an unavailable auxiliary call must never turn a successful reply into a failed run.
-    const replyId = current.conversation?.at(-1)?.id;
-    const suggestions = await generateConversationSuggestions(current, model, deps.stream, deps.signal, command.language).catch(() => []);
-    deps.signal.throwIfAborted();
-    if (suggestions.length) await save(state => {
-      const latest = state.conversation?.at(-1);
-      if (latest && latest.id === replyId && latest.status === "completed") latest.suggestions = suggestions;
-    });
+    continueWithWorkspace = coding?.workspaceSelected?.() === true;
+    if (!continueWithWorkspace) {
+      persist(state => { state.contextStatus = "ready"; appendStandardGenerationResult(state); }); await writes;
+      if (writeFailure) throw writeFailure;
+      // Follow-ups are optional: an unavailable auxiliary call must never turn a successful reply into a failed run.
+      const replyId = current.conversation?.at(-1)?.id;
+      const suggestions = await generateConversationSuggestions(current, model, deps.stream, deps.signal, command.language).catch(() => []);
+      deps.signal.throwIfAborted();
+      if (suggestions.length) await save(state => {
+        const latest = state.conversation?.at(-1);
+        if (latest && latest.id === replyId && latest.status === "completed") latest.suggestions = suggestions;
+      });
+    }
   } finally {
     unsubscribe(); deps.signal.removeEventListener("abort", abort);
     // SDK disposal only detaches listeners; native MCP needs its shutdown event to cancel retries and close connections.
@@ -195,4 +208,6 @@ export async function runStandardAgent(projectId: string, command: StandardComma
   }
   } finally { provider.dispose(); await modelRuntime.removeRuntimeApiKey(model.provider); }
   } finally { coding?.close(); }
+  // Rebuild the native tools and extensions in the selected cwd, keeping this run and its original user turn.
+  if (continueWithWorkspace) await runStandardAgentTurn(projectId, command, current, deps, true);
 }

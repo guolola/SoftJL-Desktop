@@ -3,12 +3,12 @@ import { useCallback, useMemo, useState } from "react";
 import type { StandardProjectState } from "../../../../../shared/contracts/index.js";
 import { InstructionDocumentsPage } from "../../documents/components/instruction-documents-page.js";
 
-export function StandardDocumentsPage({ state, disabled }: {
-  state: StandardProjectState; disabled: boolean;
+export function StandardDocumentsPage({ projectId, state, disabled }: {
+  projectId: string; state: StandardProjectState; disabled: boolean;
 }) {
   const [activeDocumentId, setActiveDocumentId] = useState<string>();
   const onBack = useCallback(() => setActiveDocumentId(undefined), []);
   const revision = Object.values(state.documents ?? {}).map(document => document.documentId ?? "").join(",");
   const ordinary = useMemo(() => ({ onOpen: setActiveDocumentId, onBack, revision, disabled }), [onBack, revision, disabled]);
-  return <InstructionDocumentsPage activeDocumentId={activeDocumentId} ordinary={ordinary} />;
+  return <InstructionDocumentsPage activeDocumentId={activeDocumentId} projectId={projectId} {...ordinary} />;
 }

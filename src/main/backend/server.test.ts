@@ -57,8 +57,7 @@ test("desktop has no login, rejects unrelated clients, and persists modeling pro
       payload: {
         name: "Local Project",
         description: null,
-        projectMode: "standard",
-      },
+        },
     });
     assert.equal(created.statusCode, 201, created.body);
     const id = created.json().project.id;
@@ -71,9 +70,9 @@ test("desktop has no login, rejects unrelated clients, and persists modeling pro
     assert.equal((await server.app.inject({ method: "POST", url: workspaceUrl, headers, payload: { directory: codeDirectory } })).statusCode, 403);
     assert.equal((await server.app.inject({ method: "POST", url: workspaceUrl, headers: { ...headers, "x-softjl-directory-selection": options.directorySelectionCapability }, payload: { directory: codeDirectory } })).statusCode, 200);
     assert.equal((await server.app.inject({ url: workspaceUrl, headers })).json().directory, codeDirectory);
-    const professional = await server.app.inject({ method: "POST", url: "/api/projects", headers, payload: { name: "Engineering project", description: null, projectMode: "professional" } });
-    const professionalWorkspaceUrl = `/api/desktop/projects/${professional.json().project.id}/conversation-code`;
-    assert.equal((await server.app.inject({ method: "POST", url: professionalWorkspaceUrl, headers: { ...headers, "x-softjl-directory-selection": options.directorySelectionCapability }, payload: { directory: codeDirectory } })).statusCode, 200);
+    const secondProject = await server.app.inject({ method: "POST", url: "/api/projects", headers, payload: { name: "Second project", description: null, } });
+    const secondWorkspaceUrl = `/api/desktop/projects/${secondProject.json().project.id}/conversation-code`;
+    assert.equal((await server.app.inject({ method: "POST", url: secondWorkspaceUrl, headers: { ...headers, "x-softjl-directory-selection": options.directorySelectionCapability }, payload: { directory: codeDirectory } })).statusCode, 200);
     for (const [method, url] of [
       ["GET", "/api/desktop/agents"],
       ["GET", "/api/desktop/projects/" + id + "/coding"],
@@ -95,7 +94,7 @@ test("desktop has no login, rejects unrelated clients, and persists modeling pro
     assert.equal(renamed.username, "Admin");
     assert.equal(renamed.displayName, "Admin");
     assert.equal((await server.app.inject({ url: workspaceUrl, headers })).json().directory, codeDirectory);
-    assert.equal((await server.app.inject({ url: professionalWorkspaceUrl, headers })).json().directory, codeDirectory);
+    assert.equal((await server.app.inject({ url: secondWorkspaceUrl, headers })).json().directory, codeDirectory);
     assert.equal(server.origin, firstOrigin);
     assert.deepEqual((await server.app.inject({ url: workspaceUrl, headers })).json().approvals, []);
     assert.equal((await server.app.inject({ method: "DELETE", url: workspaceUrl, headers })).json().directory, null);

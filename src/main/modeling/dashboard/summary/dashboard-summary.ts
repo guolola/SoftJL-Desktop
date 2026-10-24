@@ -1,9 +1,8 @@
 // Aggregates authorized project metadata and run summaries for dashboard-shell-06.
-import type { DashboardRun, DashboardSummary, DocumentLibraryItem } from "../../../../shared/contracts/index.js";
-import type { AuthStore, ProjectMemberRecord, ProjectRecord, UserRecord } from "../../auth/in-memory-auth-store.js";
+import type { DashboardRun,DashboardSummary,DocumentLibraryItem } from "../../../../shared/contracts/index.js";
+import type { AuthStore,ProjectMemberRecord,ProjectRecord,UserRecord } from "../../auth/in-memory-auth-store.js";
 import type { DocumentLibrary } from "../../documents/library/document-library.js";
-import type { RunRecord, RunRecordStore } from "../../runs/records/run-record-store.js";
-import { dashboardArtifactTimings } from "../../runs/records/dashboard-artifact-timings.js";
+import type { RunRecord,RunRecordStore } from "../../runs/records/run-record-store.js";
 import { buildDashboardProgress } from "./dashboard-progress.js";
 
 const DAY = 86400000;
@@ -14,23 +13,13 @@ function validDate(value: string | null | undefined) {
 export function dashboardRunFromRecord(record: RunRecord): DashboardRun | null {
   if (!record.metadata?.projectId) return null;
   const snapshot = record.snapshot;
-  const startIndex = record.events.findIndex(event => event.type === "stage_started");
-  const endIndex = record.events.findIndex(event => ["completed", "failed", "cancelled"].includes(event.type));
-  const settings = "providerSettings" in snapshot ? snapshot.providerSettings : null;
-  const runKind = "selectedArtifacts" in snapshot ? "feasibility" : "documentKind" in snapshot ? "document" : "designModelTraceability" in snapshot ? "design" : "requirements";
-  return {
-    runId: snapshot.runId, projectId: record.metadata.projectId,
-    runKind,
+  if (!snapshot.standardRun) return null;
+  return { runId: snapshot.runId, projectId: record.metadata.projectId,
+    runKind: snapshot.standardRun.operation.endsWith("Spec") ? "document" : "requirements",
     status: record.terminal && ["running", "queued"].includes(snapshot.status) ? "failed" : snapshot.status,
-    model: (settings && "model" in settings ? settings.model : record.metadata.model)?.trim() || null,
-    createdAt: validDate(record.metadata.createdAt),
-    startedAt: validDate(record.eventCreatedAt?.[startIndex]),
-    completedAt: validDate(record.metadata.completedAt ?? record.eventCreatedAt?.[endIndex]),
-    artifactTimings: dashboardArtifactTimings({ runKind, status: snapshot.status,
-      ...("documentKind" in snapshot ? { documentId: snapshot.documentId, documentKind: snapshot.documentKind, fileName: snapshot.fileName } : {}),
-      ...("models" in snapshot ? { models: snapshot.models } : {}),
-    }, record.events, record.eventCreatedAt ?? []),
-  };
+    model: snapshot.standardRun.model, createdAt: validDate(record.metadata.createdAt),
+    startedAt: validDate(record.metadata.createdAt), completedAt: validDate(record.metadata.completedAt), artifactTimings: [] };
+
 }
 export function dashboardDuration(run: Pick<DashboardRun, "startedAt" | "completedAt">) {
   if (!run.startedAt || !run.completedAt) return null;
@@ -44,7 +33,7 @@ function aggregate(runs: DashboardRun[]) {
   const terminal = completed + failed + cancelled;
   return { runs: runs.length, completed, failed, cancelled,
     active: runs.length - terminal,
-    requirements: runs.filter(run => ["requirements", "feasibility"].includes(run.runKind)).length,
+    requirements: runs.filter(run => run.runKind === "requirements").length,
     design: runs.filter(run => run.runKind === "design").length,
     document: runs.filter(run => run.runKind === "document").length,
     successRate: terminal ? Math.round(completed / terminal * 1000) / 10 : null };

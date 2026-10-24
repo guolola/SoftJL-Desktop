@@ -1,11 +1,10 @@
 // Persists run records/events to PostgreSQL while preserving the existing Map API.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { assertCurrentRunSnapshot, runEventSchema, runEventMetadataSchema, type DashboardRun, type RunEvent } from "../../../../shared/contracts/index.js";
+import { assertCurrentRunSnapshot,runEventMetadataSchema,runEventSchema,type DashboardRun,type RunEvent } from "../../../../shared/contracts/index.js";
 import type { Queryable } from "../../db/transactions.js";
-import type { RunRecord, RunRecordMetadata, RunRecordReadOptions, RunRecordStore } from "./run-record-store.js";
 import { createRunError } from "../pipelines/shared/errors.js";
-import { dashboardArtifactTimings, type DashboardTimingEvent, type DashboardTimingSnapshot } from "./dashboard-artifact-timings.js";
+import type { RunRecord,RunRecordMetadata,RunRecordReadOptions,RunRecordStore } from "./run-record-store.js";
 import { RUN_SUMMARY_SNAPSHOT_SQL } from "./run-summary-projection.js";
 
 interface RunRecordRow {
@@ -110,11 +109,6 @@ function readCompletedAt(record: RunRecord, event?: RunEvent) {
   return new Date().toISOString();
 }
 
-function persistedSystemName(snapshot: unknown) {
-  const value = (snapshot as { _systemName?: unknown } | null)?._systemName;
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
-
 function createMetadata(row: RunRecordRow): RunRecordMetadata | undefined {
   if (
     !row.user_id &&
@@ -129,8 +123,6 @@ function createMetadata(row: RunRecordRow): RunRecordMetadata | undefined {
   }
   return {
     userId: row.user_id ?? undefined,
-    offlineDemoFixture: (row.snapshot as { _offlineDemoFixture?: unknown })._offlineDemoFixture === "library-seat" ? "library-seat" : undefined,
-    systemName: persistedSystemName(row.snapshot),
     projectId: row.project_id ?? undefined,
     sourceRunId: row.source_run_id ?? undefined,
     sourceAction: row.source_action ?? undefined,
@@ -174,11 +166,6 @@ function hydratePersistedEvent(
   return runEventSchema.parse(event);
 }
 
-function shouldMarkActiveRunsInterruptedOnRestore(env: NodeJS.ProcessEnv = process.env) {
-  const queueMode = env.UML_RUN_QUEUE_MODE?.trim().toLowerCase();
-  return queueMode !== "bullmq";
-}
-
 function cloneSnapshot(snapshot: RunRecord["snapshot"]) {
   return JSON.parse(JSON.stringify(snapshot)) as RunRecord["snapshot"];
 }
@@ -218,7 +205,7 @@ class PostgresRunRecordStore extends Map<string, RunRecord> implements Persisten
 
   async restore() {
     // BullMQ owns recovery. Starting API/worker processes must never hydrate history.
-    if (!shouldMarkActiveRunsInterruptedOnRestore()) return;
+    if (!true) return;
     const records = await this.db.query<RunRecordRow>(`
       select id, user_id, project_id, source_run_id, source_action, source_run_status, snapshot, status, stage, model, provider_config_id, error, error_code, created_at, completed_at,
         (select count(*) from run_events where run_id = run_records.id) as event_count,
@@ -291,47 +278,15 @@ async listRecords(projectIds?: string[]) {
   async listDashboardRuns(projectIds: string[]): Promise<DashboardRun[]> {
     if (projectIds.length === 0) return [];
     await this.flush();
-    // Read only summary fields from persisted records. Stage timestamps are real events, not
-    // substitutes based on queue creation; absent stage events have no stage timing.
-    const result = await this.db.query<{
-      id: string; project_id: string; status: DashboardRun["status"]; model: string | null;
-      run_kind: DashboardRun["runKind"]; created_at: Date | string;
-      started_at: Date | string | null; completed_at: Date | string | null;
-      timing_snapshot: Omit<DashboardTimingSnapshot, "runKind">;
-      timing_events: { event: DashboardTimingEvent; at: string }[] | null;
-    }>(`
-      select r.id, r.project_id,
-        case when r.status in ('queued', 'running') and r.completed_at is not null then 'failed' else r.status end as status,
-        coalesce(nullif(trim(r.model), ''), nullif(trim(r.snapshot->'providerSettings'->>'model'), '')) as model,
-        case when r.snapshot ? 'selectedArtifacts' then 'feasibility'
-          when r.snapshot ? 'documentKind' then 'document'
-          when r.snapshot ? 'designModelTraceability' then 'design' else 'requirements' end as run_kind,
-        r.created_at, r.completed_at,
-        jsonb_build_object('documentId', r.snapshot->>'documentId', 'documentKind', r.snapshot->>'documentKind',
-          'fileName', r.snapshot->>'fileName', 'models', coalesce((select jsonb_agg(jsonb_build_object(
-            'modelId', m->>'modelId', 'diagramKind', m->>'diagramKind', 'title', m->>'title'))
-            from jsonb_array_elements(case when jsonb_typeof(r.snapshot->'models') = 'array'
-              then r.snapshot->'models' else '[]'::jsonb end) m), '[]'::jsonb)) as timing_snapshot,
-        (select jsonb_agg(jsonb_build_object('at', e.created_at, 'event', jsonb_build_object(
-          'type', e.payload->>'type', 'eventId', e.payload->>'eventId', 'createdAt', e.payload->>'createdAt',
-          'stage', e.payload->>'stage', 'subtaskId', e.payload->>'subtaskId',
-          'subtaskStatus', e.payload->>'subtaskStatus', 'diagramKind', e.payload->>'diagramKind',
-          'modelId', e.payload->>'modelId', 'artifactKind', e.payload->>'artifactKind', 'phase', e.payload->>'phase',
-          'callId', e.payload->>'callId', 'operation', e.payload->>'operation')) order by e.sequence)
-          from run_events e where e.run_id = r.id and (e.payload->>'type' in ('stage_started', 'stage_progress', 'artifact_ready')
-            or (e.payload->>'type'='run_activity' and e.payload->>'phase' in ('started','completed','failed')))) as timing_events,
-        (select e.created_at from run_events e where e.run_id = r.id and e.payload->>'type' = 'stage_started'
-          order by e.sequence asc limit 1) as started_at
-      from run_records r where r.project_id = any($1::text[])
+    const result = await this.db.query<{ id: string; project_id: string; status: DashboardRun["status"]; model: string | null;
+      operation: string; created_at: Date | string; completed_at: Date | string | null }>(`
+      select id, project_id, status, model, snapshot->'standardRun'->>'operation' as operation, created_at, completed_at
+      from run_records where project_id = any($1::text[])
     `, [projectIds]);
-    return result.rows.map(row => ({ runId: row.id, projectId: row.project_id,
-      status: row.status, model: row.model, runKind: row.run_kind,
-      createdAt: toIsoString(row.created_at) ?? null, startedAt: toIsoString(row.started_at) ?? null,
-      completedAt: toIsoString(row.completed_at) ?? null,
-      artifactTimings: dashboardArtifactTimings({ ...row.timing_snapshot, runKind: row.run_kind, status: row.status },
-        (row.timing_events ?? []).map(item => { runEventMetadataSchema.parse(item.event); return item.event; }),
-        (row.timing_events ?? []).map(item => item.at)),
-    }));
+    return result.rows.map(row => ({ runId: row.id, projectId: row.project_id, status: row.status, model: row.model,
+      runKind: row.operation.endsWith("Spec") ? "document" as const : "requirements" as const,
+      createdAt: toIsoString(row.created_at) ?? null, startedAt: toIsoString(row.created_at) ?? null,
+      completedAt: toIsoString(row.completed_at) ?? null, artifactTimings: [] }));
   }
 
   async flushRun(runId: string) {
@@ -392,8 +347,6 @@ async listRecords(projectIds?: string[]) {
       const snapshot = cloneSnapshot(row.snapshot);
       snapshot.status = row.status as RunRecord["snapshot"]["status"];
       // Keep the server-only execution marker outside public run snapshots and events.
-      if ("_offlineDemoFixture" in snapshot) delete snapshot._offlineDemoFixture;
-      if ("_systemName" in snapshot) delete snapshot._systemName;
       // Compact list projections omit full model content; detail/worker restores must satisfy current contracts.
       if (!readOnly) assertCurrentRunSnapshot(snapshot);
       const events = (eventRowsByRun.get(row.id) ?? []).map((eventRow) =>
@@ -512,13 +465,8 @@ async listRecords(projectIds?: string[]) {
           readStage(snapshot),
           readPersistedStatus(record, event),
           readModel(snapshot),
-          metadata?.offlineDemoFixture ? null : readProviderConfigId(snapshot),
-          // Server-only execution markers ride inside the snapshot JSON and are stripped on load.
-          JSON.stringify({
-            ...snapshot,
-            ...(metadata?.offlineDemoFixture ? { _offlineDemoFixture: metadata.offlineDemoFixture } : {}),
-            ...(metadata?.systemName ? { _systemName: metadata.systemName } : {}),
-          }),
+          readProviderConfigId(snapshot),
+          JSON.stringify(snapshot),
           snapshot.error ? JSON.stringify(snapshot.error) : null,
           snapshot.error?.code ?? null,
           readCompletedAt(record, event),

@@ -6,7 +6,6 @@ import { Button } from "../../../shared/ui/button.js";
 import { Badge } from "../../../shared/ui/badge.js";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../../../shared/ui/dialog.js";
 import { localizeCaughtFailure, localizeRunFailure } from "../../../shared/i18n/api-errors.js";
-import { getHistoryOperation, historyDiagramLabel } from "../lib/project-history-details.js";
 import { platformApi, type PlatformRunSummary } from "../services/platform-api.js";
 import { runTokenConsumptionPresentation } from "../lib/run-token-consumption.js";
 
@@ -40,59 +39,13 @@ export function ProjectRunDetailDialog({ projectId, run, onClose }: {
   const current = detail?.run ?? run;
   const tokenUsage = runTokenConsumptionPresentation(current.tokenConsumption ?? run.tokenConsumption);
   const snapshot = detail?.snapshot;
-  const operation = getHistoryOperation(current);
-  const design = operation === "design";
-  const label = (id: string) => historyDiagramLabel(id, design, t, snapshot);
-  const operationLabel = t(`projectShell.historyUi.operations.${operation ?? "requirements"}`);
-  const artifactLabel = (id: string) => t(`projectShell.historyUi.artifacts.${id}`, { defaultValue: id });
-  const documentKind = snapshot && "documentKind" in snapshot ? snapshot.documentKind : current.documentKind;
-  const targets = snapshot && "selectedArtifacts" in snapshot
-    ? snapshot.selectedArtifacts.map(artifactLabel)
-    : documentKind
-      ? [t(`projectShell.historyUi.documentKinds.${documentKind}`)]
-      : operation === "rules"
-        ? [operationLabel]
-        : ((snapshot && "selectedDiagrams" in snapshot ? snapshot.selectedDiagrams : current.selectedDiagrams) ?? []).map(label);
-  const outputs: string[] = [];
-  // The API boundary requires explicit receipts before displaying accepted outputs.
-  const accepted = (kind: string, id?: string) => snapshot?.outputManifest.some(
-    (output) => output.kind === kind && (id === undefined || output.id === id),
-  );
-  if (snapshot) {
-    // Quick history lists only artifacts attributed to this accepted message.
-    if (operation === "quick" && "standardRun" in snapshot && snapshot.standardRun) {
-      outputs.push(...snapshot.standardRun.artifacts.filter(item => snapshot.outputManifest.some(output => output.id === item.id))
-        .map(item => item.title));
-    }
-    if (operation === "rules" && "rules" in snapshot) {
-      outputs.push(...snapshot.rules.filter((rule) => accepted("rule", rule.id)).map((rule) => `${rule.id} · ${rule.text}`));
-    }
-    if ((operation === "requirements" || design) && "models" in snapshot) {
-      outputs.push(...snapshot.models.filter((model) =>
-        snapshot.selectedDiagrams.some((kind) => kind === model.diagramKind) && accepted("model", model.modelId ?? model.diagramKind),
-      ).map((model) => `${label(model.diagramKind)} · ${model.title}`));
-    }
-    if ("selectedArtifacts" in snapshot) {
-      if (snapshot.selectedArtifacts.includes("context") && snapshot.contextModel && accepted("context")) outputs.push(artifactLabel("context"));
-      if (snapshot.selectedArtifacts.includes("business-flow") && snapshot.businessFlow && accepted("businessFlow")) outputs.push(artifactLabel("business-flow"));
-      if (snapshot.selectedArtifacts.includes("implementation") && snapshot.implementationPlan && accepted("implementationPlan")) outputs.push(artifactLabel("implementation"));
-    }
-    if ("documentKind" in snapshot) {
-      if (snapshot.fileName && accepted("document")) outputs.push(snapshot.fileName);
-      if (accepted("sections") || accepted("document")) outputs.push(...snapshot.sections.map((section) => section.title));
-    }
-  }
+  const operationLabel = t("projectShell.historyUi.operations.quick");
+  const targets = [operationLabel];
+  const outputs = snapshot && "standardRun" in snapshot && snapshot.standardRun
+    ? snapshot.standardRun.artifacts.filter(item => snapshot.outputManifest.some(output => output.id === item.id)).map(item => item.title) : [];
   const primaryError = snapshot?.error ?? current.error;
   const failureFallback = t("errors.codes.RUN_INTERNAL_ERROR");
-  const errors = [primaryError || current.errorMessage ? localizeRunFailure(primaryError ?? current.errorMessage, failureFallback) : null];
-  const diagramErrors = snapshot && "diagramErrors" in snapshot
-    ? Object.entries(snapshot.diagramErrors).flatMap(([id, value]) => value ? [{ diagramId: id, ...value, message: value.error.message }] : [])
-    : current.diagramErrorSummary ?? [];
-  errors.push(...diagramErrors.map((item) => `${label(item.diagramId)} · ${localizeRunFailure(item.error ?? item.message, failureFallback)}`));
-  const missing = snapshot && "missingArtifacts" in snapshot ? snapshot.missingArtifacts : current.missingArtifactSummary ?? [];
-  errors.push(...missing.map((item) => t("projectShell.historyUi.missingArtifact", { artifact: item })));
-  const errorMessages = [...new Set(errors.filter((error): error is string => Boolean(error)))];
-
+  const errorMessages = [primaryError || current.errorMessage ? localizeRunFailure(primaryError ?? current.errorMessage, failureFallback) : null].filter(Boolean);
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
       <DialogContent className="sm:max-w-2xl">

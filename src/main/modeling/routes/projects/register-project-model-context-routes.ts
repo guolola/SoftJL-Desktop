@@ -1,4 +1,4 @@
-// Exposes authorized model capabilities to both engineering and quick modeling composers.
+// Exposes authorized model capabilities to conversation modeling composers.
 import { createHttpErrorResponse } from "../../server/http-error-response.js";
 import { z } from "zod";
 import type { FastifyInstance } from "fastify";

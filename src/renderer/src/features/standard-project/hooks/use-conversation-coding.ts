@@ -10,6 +10,8 @@ export function useConversationCoding(projectId: string) {
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const lock = useRef(false);
+  const currentProject = useRef(projectId);
+  currentProject.current = projectId;
   const [readError, setReadError] = useState("");
   const [revision, setRevision] = useState(0);
   useEffect(() => {
@@ -29,10 +31,15 @@ export function useConversationCoding(projectId: string) {
     lock.current = true;
     setPending(true); setError("");
     try { await action(); setRevision(value => value + 1); }
-    catch (error) { setError(error instanceof Error ? error.message : "操作失败，请重试"); throw error; }
+    catch (error) { if (currentProject.current === projectId) setError(error instanceof Error ? error.message : "操作失败，请重试"); throw error; }
     finally { lock.current = false; setPending(false); }
   };
   return { available, status, error: error || readError, pending, connected: !readError,
+    selectDirectory: (id: string, runId: string) => act(async () => {
+      // Native selection saves the directory and releases this run's waiting tool together.
+      const directory = await window.desktop.chooseConversationDirectory(projectId, { approvalId: id, runId });
+      if (directory && currentProject.current === projectId) setStatus(value => ({ ...value, directory, approvals: value.approvals.filter(item => item.id !== id) }));
+    }),
     decide: (id: string, runId: string, value: string | boolean | null) => act(async () => {
       await conversationCodingApi.decide(projectId, id, runId, value);
       setStatus(value => ({ ...value, approvals: value.approvals.filter(item => item.id !== id) }));

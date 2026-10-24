@@ -1,22 +1,19 @@
 // Defines the authenticated dashboard's data contract, independent of presentation blocks.
 import { z } from "zod";
 import { runStatusSchema } from "./runs/runs.js";
-import { diagramKindSchema, designDiagramKindSchema } from "./requirements/requirements.js";
 import { documentKindSchema } from "./documents.js";
 
 // Keep zero-sample categories visible and synchronized with supported production artifacts.
 export const dashboardArtifactTypes = [
-  ...diagramKindSchema.options.filter(kind => kind !== "context").map(kind => `requirements:${kind}`),
-  ...designDiagramKindSchema.options.map(kind => `design:${kind}`),
-  "feasibility:context", "feasibility:business-flow", "feasibility:implementation",
+  "requirements:function", "requirements:usecase", "requirements:activity", "design:architecture", "design:er", "design:class", "design:sequence", "design:table",
   ...documentKindSchema.options.map(kind => `document:${kind}`),
 ];
 
 const count = z.number().int().nonnegative();
 const rate = z.number().min(0).max(100).nullable();
 const timestamp = z.string().datetime({ offset: true }).nullable();
-export const dashboardRunKindSchema = z.enum(["requirements", "feasibility", "design", "document"]);
-export const dashboardProgressStages = ["feasibility", "requirements", "design", "document"] as const;
+export const dashboardRunKindSchema = z.enum(["requirements", "design", "document"]);
+export const dashboardProgressStages = ["requirements", "design", "document"] as const;
 export const dashboardProgressArtifactTypes = dashboardArtifactTypes;
 export const dashboardArtifactTimingSchema = z.object({
   artifactId: z.string(), artifactType: z.string(), name: z.string().nullable(),
@@ -50,7 +47,7 @@ export const dashboardSummarySchema = z.object({
     runs: count, completed: count, terminal: count, successRate: rate,
     averageDurationMs: z.number().nonnegative().nullable(),
     progress: z.object({ completed: count, total: count, percentage: rate,
-      stages: z.array(z.object({ kind: dashboardRunKindSchema, completed: count, total: count })).length(4).optional(),
+      stages: z.array(z.object({ kind: dashboardRunKindSchema, completed: count, total: count })).length(3).optional(),
     }).nullable().optional(),
   })),
   artifactDurations: z.array(z.object({

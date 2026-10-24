@@ -3,7 +3,7 @@
   "adaptations": [
     "workspace import paths",
     "WebSearch uses the real source count and distinct keys for results from the same domain",
-    "ElicitationForm accepts multiline fields for native Pi editor dialogs"
+    "ElicitationForm accepts multiline Pi editor fields and localized actions for the native directory chooser"
   ],
   "components": [
     {
@@ -11,7 +11,7 @@
       "documentation": "https://www.assistant-ui.com/elements/elicitation-form",
       "file": "elements/elicitation-form.tsx",
       "upstreamContentSha256": "9d98ed74254ada76f5325f6d8cb333cf56bd3521763c3f6217c64e3ad8c2e621",
-      "installedFileSha256": "7a262264ed9414d5e8d2373cf730707f8aadd502d45a9d063d96644cdca798e3"
+      "installedFileSha256": "518324ed96c75e82632b89c21b519e6fda3de393bb8f63f5356cb5c0bab5e5f0"
     },
     {
       "registry": "https://r.assistant-ui.com/elements-task-card.json",

@@ -31,6 +31,8 @@ const mount = (kind: "mcp" | "skills") => render(<AppI18nProvider><AgentIntegrat
 
 it("tests saved MCP configuration and displays the discovered tools", async () => {
   mount("mcp"); await screen.findByText("Context7");
+  expect(screen.queryByText("Code Mode")).not.toBeInTheDocument();
+  expect(screen.queryByText("Tool Search")).not.toBeInTheDocument();
   expect(screen.getByText(/需要网络/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "测试连接" }));
   await userEvent.click(await screen.findByText(/连接成功，发现 1 个工具/));
@@ -41,6 +43,7 @@ it("tests saved MCP configuration and displays the discovered tools", async () =
 
 it("does not send empty credential maps when editing an existing MCP", async () => {
   mount("mcp"); await userEvent.click(await screen.findByRole("button", { name: "配置" }));
+  expect(screen.queryByLabelText("工具调用方式")).not.toBeInTheDocument();
   expect(screen.getByLabelText("请求头（JSON 对象）")).toHaveValue("");
   expect(screen.getByText(/已保存的键：Authorization/)).toBeInTheDocument();
   await userEvent.clear(screen.getByLabelText("显示名称"));
@@ -49,6 +52,19 @@ it("does not send empty credential maps when editing an existing MCP", async () 
   await screen.findByText("Docs");
   const request = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === "PUT")!;
   expect(JSON.parse(String(request[1]?.body)).config).toEqual({ type: "http", url: "https://example.test/mcp" });
+  expect(JSON.parse(String(request[1]?.body)).exposure).toBe("deferred");
+});
+
+it("saves a basic custom MCP with direct tool calls without a mode selector", async () => {
+  mount("mcp"); await userEvent.click(await screen.findByRole("button", { name: "添加 MCP" }));
+  expect(screen.queryByLabelText("工具调用方式")).not.toBeInTheDocument();
+  await userEvent.type(screen.getByLabelText("标识（小写英文与连字符）"), "custom-server");
+  await userEvent.type(screen.getByLabelText("显示名称"), "Custom");
+  await userEvent.type(screen.getByLabelText("启动程序"), "npx");
+  await userEvent.click(screen.getByRole("button", { name: "保存配置" }));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([, options]) => options?.method === "PUT")).toBe(true));
+  const request = vi.mocked(fetch).mock.calls.find(([, options]) => options?.method === "PUT")!;
+  expect(JSON.parse(String(request[1]?.body))).toMatchObject({ exposure: "direct", config: { type: "stdio", command: "npx", args: [] } });
 });
 
 it("blocks invalid JSON before saving a custom MCP", async () => {

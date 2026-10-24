@@ -18,7 +18,7 @@ test("PostgreSQL inbox persists recipient decisions, read state and resent invit
     const owner = (await store.createUser({ username: "owner", displayName: "Owner", passwordHash: "hash" }))!;
     const recipient = (await store.createUser({ username: "recipient", displayName: "Recipient", passwordHash: "hash" }))!;
     const stranger = (await store.createUser({ username: "stranger", displayName: "Stranger", passwordHash: "hash" }))!;
-    const { project } = await store.createProject({ ownerUserId: owner.id, name: "Inbox project", description: null, visibility: "private", projectMode: "standard" });
+    const { project } = await store.createProject({ ownerUserId: owner.id, name: "Inbox project", description: null, visibility: "private", });
     const member = await store.createMember({ projectId: project.id, userId: recipient.id, username: recipient.username, displayName: recipient.displayName, role: "editor", status: "invited", invitedByUserId: owner.id, invitedAt: new Date().toISOString(), joinedAt: null });
     const inbox = () => listInboxMessages(store as unknown as AuthStore, recipient);
     assert.equal((await inbox()).unreadCount, 1);

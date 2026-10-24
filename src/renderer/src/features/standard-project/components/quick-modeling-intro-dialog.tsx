@@ -29,7 +29,7 @@ export function QuickModelingIntroDialog({ projectId, contentRef }: { projectId:
   }, [contentRef, routeReady]);
 
   useEffect(() => {
-    if (routeReady && consumeProjectIntroduction(projectId, "standard")) setOpen(true);
+    if (routeReady && consumeProjectIntroduction(projectId)) setOpen(true);
   }, [projectId, routeReady]);
 
   return <Dialog open={open} onOpenChange={setOpen}>

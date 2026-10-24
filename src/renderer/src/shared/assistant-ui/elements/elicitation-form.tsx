@@ -2,6 +2,7 @@
 "use client";
 
 import { useId, type ComponentProps } from "react";
+import { useTranslation } from "react-i18next";
 import { CheckIcon, PlugIcon, XIcon } from "lucide-react";
 import { cn } from "@/shared/ui/utils";
 import { field, inkButton, mono, paper } from "./surfaces.js";
@@ -20,6 +21,8 @@ export interface ElicitationField {
 }
 
 function Toggle({ value }: { value: string }) {
+  const { i18n } = useTranslation();
+  const zh = i18n.resolvedLanguage?.startsWith("zh");
   const enabled = value === "true";
   return (
     <>
@@ -38,7 +41,7 @@ function Toggle({ value }: { value: string }) {
         />
       </span>
       <span className="text-muted-foreground text-xs">
-        {enabled ? "On" : "Off"}
+        {enabled ? (zh ? "开启" : "On") : (zh ? "关闭" : "Off")}
       </span>
     </>
   );
@@ -52,6 +55,8 @@ export function ElicitationForm({
   onFieldChange,
   onAccept,
   onDecline,
+  acceptLabel,
+  declineLabel,
   className,
   ...props
 }: Omit<
@@ -64,6 +69,8 @@ export function ElicitationForm({
   | "onFieldChange"
   | "onAccept"
   | "onDecline"
+  | "acceptLabel"
+  | "declineLabel"
 > & {
   server: string;
   message: string;
@@ -72,7 +79,11 @@ export function ElicitationForm({
   onFieldChange?: ((name: string, value: string) => void) | undefined;
   onAccept?: () => void;
   onDecline?: () => void;
+  acceptLabel?: string;
+  declineLabel?: string;
 }) {
+  const { i18n } = useTranslation();
+  const zh = i18n.resolvedLanguage?.startsWith("zh");
   const fieldPrefix = useId();
   const { receiptRef, focusHandlers } = useReceiptFocus(props);
   const interactive = state === "request" && onFieldChange !== undefined;
@@ -105,7 +116,7 @@ export function ElicitationForm({
           {server}
         </span>
         <span className={cn(mono, "text-muted-foreground shrink-0")}>
-          needs input
+          {zh ? "等待输入" : "needs input"}
         </span>
       </div>
 
@@ -235,7 +246,7 @@ export function ElicitationForm({
               onClick={onDecline}
               className="text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground/90 h-8 rounded-full px-3.5 text-xs font-medium transition-[background-color,color,scale] duration-150 active:scale-[0.96]"
             >
-              Decline
+              {declineLabel ?? (zh ? "取消" : "Decline")}
             </button>
             <button
               type="button"
@@ -246,7 +257,7 @@ export function ElicitationForm({
                 "flex h-8 items-center rounded-full px-3.5 text-xs font-medium disabled:pointer-events-none disabled:opacity-40",
               )}
             >
-              Send
+              {acceptLabel ?? (zh ? "提交" : "Send")}
             </button>
           </>
         ) : (
@@ -259,12 +270,12 @@ export function ElicitationForm({
             {state === "accepted" ? (
               <>
                 <CheckIcon className="size-3.5 text-emerald-500" />
-                Sent to {server}
+                {zh ? `已发送至 ${server}` : `Sent to ${server}`}
               </>
             ) : (
               <>
                 <XIcon className="text-muted-foreground size-3.5" />
-                Declined
+                {zh ? "已取消" : "Declined"}
               </>
             )}
           </span>

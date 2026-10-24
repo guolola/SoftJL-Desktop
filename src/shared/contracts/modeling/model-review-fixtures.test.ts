@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { getStageModelSchemas, validateModelInput, type ModelingStage } from "./model-semantics.js";
 import { modelReviewFixtures } from "../testing/model-review-fixtures.js";
 
-for (const stage of ["feasibility", "requirements", "design"] as ModelingStage[]) for (const schema of getStageModelSchemas(stage)) {
+for (const stage of ["requirements", "design"] as ModelingStage[]) for (const schema of getStageModelSchemas(stage)) {
   const kind = schema.shape.diagramKind.value;
   test(`${stage}.${kind}: legal complex cases pass and missing references/illegal relation types are detected`, () => {
     for (const { name, model } of modelReviewFixtures(stage, kind)) assert.deepEqual(validateModelInput(model, stage).filter((item) => item.severity === "error"), [], name);

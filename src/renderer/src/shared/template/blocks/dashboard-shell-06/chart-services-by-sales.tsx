@@ -38,7 +38,7 @@ const ServicesBySalesCard = ({ className, data, onProject, ...actions }: Dashboa
         </Select>
         <Select value={data.family} onValueChange={value => value && data.onFamilyChange(value)}>
           <SelectTrigger aria-label={t('artifactFamily')} size='sm'><SelectValue /></SelectTrigger>
-          <SelectContent>{[['all', 'allArtifacts'], ['requirements', 'requirementArtifacts'], ['design', 'designArtifacts'], ['document', 'documentArtifacts'], ['feasibility', 'feasibilityArtifacts']].map(([value, label]) => <SelectItem key={value} value={value}>{t(label)}</SelectItem>)}</SelectContent>
+          <SelectContent>{[['all', 'allArtifacts'], ['requirements', 'requirementArtifacts'], ['design', 'designArtifacts'], ['document', 'documentArtifacts']].map(([value, label]) => <SelectItem key={value} value={value}>{t(label)}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={data.projectId} onValueChange={value => value && data.onProjectChange(value)}>
           <SelectTrigger aria-label={t('durationProject')} size='sm' className='max-w-48'><SelectValue /></SelectTrigger>

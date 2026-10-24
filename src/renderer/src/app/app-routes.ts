@@ -43,7 +43,7 @@ export function matchAppRoute(pathname: string): AppRoute {
   if (pathname === "/projects/new")
     return { kind: "projects-new", path: "/projects/new" };
   const projectMatch = pathname.match(
-    /^\/projects\/([^/]+)(?:\/(lineage|settings|history|documents))?$/u,
+    /^\/projects\/([^/]+)(?:\/(settings|members|history))?$/u,
   );
   if (projectMatch) {
     const projectId = decodeURIComponent(projectMatch[1]);

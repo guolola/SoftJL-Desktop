@@ -27,10 +27,10 @@ function model(nodes: ActivityNode[], relationships: ActivityRelationship[]): Ac
 const start: ActivityNode = { id: "start", type: "start", name: "开始", actorOrLane: "user" };
 const end: ActivityNode = { id: "end", type: "end", name: "结束", actorOrLane: "user" };
 
-for (const stage of ["feasibility", "requirements"] as const) test(`${stage}: native uncolored vertical lanes follow graph order and return to a lane`, () => {
+test("native uncolored vertical lanes follow graph order and return to a lane", () => {
   const input = model([end, action("print", "领取登机牌", "user"), action("generate", "生成登机牌"), start, action("submit", "提交登机信息", "user")],
     [flow("generate", "print"), flow("submit", "generate"), flow("print", "end"), flow("start", "submit")]);
-  const artifact = generatePlantUmlArtifacts([input], stage)[0]!;
+  const artifact = generatePlantUmlArtifacts([input])[0]!;
   assert.equal(artifact.renderMapping?.mode, "native");
   assert.match(artifact.source, /\|lane_\w+\| 旅客/);
   assert.match(artifact.source, /\|lane_\w+\| 旅游 App/);

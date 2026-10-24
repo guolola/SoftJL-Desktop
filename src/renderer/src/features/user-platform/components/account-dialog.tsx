@@ -22,9 +22,9 @@ type Props = {
   globalSettingsRequestId?: number;
 };
 
-function SettingsContent({ user, onNavigate, onCancel, onDirtyChange, globalSettingsRequestId }: {
+function SettingsContent({ user, onNavigate, onCancel, globalSettingsRequestId }: {
   user?: PlatformUser | null; onNavigate: (path: string) => void; onCancel: () => void;
-  onDirtyChange: (dirty: boolean) => void; globalSettingsRequestId?: number;
+  globalSettingsRequestId?: number;
 }) {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
@@ -42,7 +42,6 @@ function SettingsContent({ user, onNavigate, onCancel, onDirtyChange, globalSett
   const busy = profileBusy || mcpBusy || skillsBusy;
   const anyDirty = modelDirty || profileDirty || mcpDirty || skillsDirty;
   const dirty = page === "models" ? modelDirty : page === "profile" ? profileDirty : page === "mcp" ? mcpDirty : skillsDirty;
-  useEffect(() => { onDirtyChange(anyDirty); }, [anyDirty, onDirtyChange]);
   useEffect(() => { if (globalSettingsRequestId) setPage("models"); }, [globalSettingsRequestId]);
 
   const pages = [
@@ -90,7 +89,7 @@ function SettingsContent({ user, onNavigate, onCancel, onDirtyChange, globalSett
         <span role="status" className="text-xs text-muted-foreground">{t(anyDirty ? "account.block37.unsaved" : integrationsPage ? "integrations.immediate" : "account.block37.allSaved")}</span>
         <div className="ml-auto flex items-center gap-2">
           {!integrationsPage && <Button variant="ghost" onClick={reset} disabled={busy}>{t("account.block37.reset")}</Button>}
-          <Button variant="outline" onClick={() => { if (!anyDirty || window.confirm(t("desktopShell.discard"))) onCancel(); }} disabled={busy}>{t("account.block37.cancel")}</Button>
+          <Button variant="outline" onClick={onCancel} disabled={busy}>{t("account.block37.cancel")}</Button>
           {!integrationsPage && <Button onClick={save} disabled={!dirty || busy}>{t("account.block37.save")}</Button>}
         </div>
       </footer>
@@ -104,20 +103,16 @@ export function AccountDialog({ showTrigger = true, open: controlledOpen, onOpen
   const inheritedUser = useAuthenticatedRouteSession()?.user;
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const open = controlledOpen ?? uncontrolledOpen;
-  const dirty = useRef(false);
-  const updateDirty = (value: boolean) => { dirty.current = value; };
-  const close = () => { dirty.current = false; (onOpenChange ?? setUncontrolledOpen)(false); };
-  return <Dialog open={open} onOpenChange={value => {
-    if (!value && dirty.current && !window.confirm(t("desktopShell.discard"))) return;
-    if (value) dirty.current = false;
-    (onOpenChange ?? setUncontrolledOpen)(value);
-  }}>
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
+  const close = () => { setOpen(false); };
+  // Dismissal discards this dialog's drafts; only explicit save actions persist edits.
+  return <Dialog open={open} onOpenChange={setOpen}>
     {showTrigger && <DialogTrigger render={<Button variant="ghost" aria-label={t("account.settings")} />}>
       <Settings className="size-4" />{t("account.settings")}
     </DialogTrigger>}
     <DialogContent showCloseButton={false} className="flex h-[min(720px,calc(100dvh-3rem))] max-w-[calc(100%-2rem)] gap-0 overflow-hidden p-0 sm:max-w-5xl">
       {open && <SettingsContent user={initialUser ?? inheritedUser} onNavigate={onNavigate} onCancel={close}
-        onDirtyChange={updateDirty} globalSettingsRequestId={globalSettingsRequestId} />}
+        globalSettingsRequestId={globalSettingsRequestId} />}
     </DialogContent>
   </Dialog>;
 }
