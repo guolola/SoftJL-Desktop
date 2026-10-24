@@ -92,10 +92,7 @@ export async function resolveProviderSettingsForRun({
 
   if (isManagedProviderSettings(providerSettings)) {
     // Demo placeholders are only meaningful in the server-authorized offline branch.
-    if (providerSettings.providerConfigId === "offline-demo" ||
-      providerSettings.model === "offline-demo-fixed-artifacts") {
-      return failure(400, "PROVIDER_CONFIG_INVALID");
-    }
+
     if (!isProjectRun) {
       return failure(401, "AUTHENTICATION_REQUIRED", "authentication");
     }
@@ -186,12 +183,7 @@ export function isActiveRun(record: RunRecord) {
 }
 
 export function taskTypeForRun(record: RunRecord): ProviderTaskType {
-  const snapshot = record.snapshot;
-  if ("selectedArtifacts" in snapshot) return "feasibility_analysis";
-  if ("documentKind" in snapshot) return "document_generation";
-
-  if ("designModelTraceability" in snapshot) return "design_modeling";
-  return "requirements_to_uml";
+  return record.snapshot.standardRun?.operation.endsWith("Spec") ? "document_generation" : "requirements_to_uml";
 }
 
 export async function recordProviderUsage({

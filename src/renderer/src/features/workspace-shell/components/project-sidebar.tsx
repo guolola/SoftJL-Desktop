@@ -1,4 +1,4 @@
-// Keeps the project sidebar shell, resize handle and footer identical in ordinary and professional modes.
+// Composes the project sidebar shell, resize handle and account footer.
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { DefaultSidebar } from "../../../shared/template/layout/default-sidebar.js";

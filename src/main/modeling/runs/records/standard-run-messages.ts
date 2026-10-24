@@ -2,14 +2,14 @@
 import type { StandardProjectState } from "../../../../shared/contracts/index.js";
 
 function results(state: StandardProjectState) {
-  const diagrams = (state.run?.work?.ids ?? []).map(id => state.diagrams[id]).filter(item => !!item);
+  const diagrams = (state.run?.diagramIds ?? state.run?.work?.ids ?? []).map(id => state.diagrams[id]).filter(item => !!item);
   const completed = diagrams.filter(item => item.status === "completed");
   const failed = diagrams.filter(item => item.status !== "completed");
   return { diagrams, completed, failed };
 }
 
 export function appendStandardGenerationResult(state: StandardProjectState) {
-  if (!state.run?.work?.ids.length) return;
+  if (!state.run || !(state.run.diagramIds ?? state.run.work?.ids)?.length) return;
   const id = `result:${state.run.id}`;
   if (state.conversation?.some(message => message.id === id)) return;
   const { diagrams, completed, failed } = results(state);

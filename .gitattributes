@@ -3,3 +3,6 @@
 *.sh text eol=lf
 *.yml text eol=lf
 *.yaml text eol=lf
+
+# Unified diff context prefixes are patch data, including spaces before upstream tabs.
+patches/*.patch text eol=lf -whitespace

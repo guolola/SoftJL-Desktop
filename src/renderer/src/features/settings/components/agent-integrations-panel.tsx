@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, BookOpen, Cable, CheckCircle2, ExternalLink, Plus, RotateCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { McpSave, McpView, SkillSave, SkillView } from "../../../../../shared/contracts/agent-integrations.js";
+import type { McpView, SkillSave, SkillView } from "../../../../../shared/contracts/agent-integrations.js";
 import { mcpSaveSchema, skillSaveSchema, integrationIdSchema } from "../../../../../shared/contracts/agent-integrations.js";
 import { Button } from "../../../shared/ui/button.js";
 import { Input } from "../../../shared/ui/input.js";
@@ -12,8 +12,8 @@ import { Switch } from "../../../shared/ui/switch.js";
 import { useAgentIntegrations } from "../hooks/use-agent-integrations.js";
 
 type Props = { kind: "mcp" | "skills"; active: boolean; onDirtyChange: (dirty: boolean) => void; onBusyChange: (busy: boolean) => void };
-type McpDraft = { id: string; name: string; description: string; enabled: boolean; exposure: McpSave["exposure"]; type: "stdio" | "http"; command: string; args: string; cwd: string; url: string; secrets: string };
-const mcpDraft = (server?: McpView): McpDraft => ({ id: server?.id ?? "", name: server?.name ?? "", description: server?.description ?? "", enabled: server?.enabled ?? false, exposure: server?.exposure ?? "codemode", type: server?.config.type ?? "stdio", command: server?.config.type === "stdio" ? server.config.command : "", args: JSON.stringify(server?.config.type === "stdio" ? server.config.args : [], null, 2), cwd: server?.config.type === "stdio" ? server.config.cwd ?? "" : "", url: server?.config.type === "http" ? server.config.url : "", secrets: "" });
+type McpDraft = { id: string; name: string; description: string; enabled: boolean; type: "stdio" | "http"; command: string; args: string; cwd: string; url: string; secrets: string };
+const mcpDraft = (server?: McpView): McpDraft => ({ id: server?.id ?? "", name: server?.name ?? "", description: server?.description ?? "", enabled: server?.enabled ?? false, type: server?.config.type ?? "stdio", command: server?.config.type === "stdio" ? server.config.command : "", args: JSON.stringify(server?.config.type === "stdio" ? server.config.args : [], null, 2), cwd: server?.config.type === "stdio" ? server.config.cwd ?? "" : "", url: server?.config.type === "http" ? server.config.url : "", secrets: "" });
 const skillDraft = (skill?: SkillView): SkillSave => ({ name: skill?.name ?? "", description: skill?.description ?? "", content: skill?.content ?? "", enabled: skill?.enabled ?? true });
 
 export function AgentIntegrationsPanel({ kind, active, onDirtyChange, onBusyChange }: Props) {
@@ -45,7 +45,8 @@ export function AgentIntegrationsPanel({ kind, active, onDirtyChange, onBusyChan
         integrationIdSchema.parse(mcp.id);
         const secretMap = mcp.secrets.trim() ? JSON.parse(mcp.secrets) : undefined;
         const config = mcp.type === "http" ? { type: "http" as const, url: mcp.url, headers: secretMap } : { type: "stdio" as const, command: mcp.command, args: JSON.parse(mcp.args), cwd: mcp.cwd || undefined, env: secretMap };
-        saved = await api.saveMcp(mcp.id, mcpSaveSchema.parse({ name: mcp.name, description: mcp.description, enabled: mcp.enabled, exposure: mcp.exposure, config }));
+        // New connections use ordinary tool calls; retain the contract of existing saved connections.
+        saved = await api.saveMcp(mcp.id, mcpSaveSchema.parse({ name: mcp.name, description: mcp.description, enabled: mcp.enabled, exposure: selectedMcp?.exposure ?? "direct", config }));
       } else {
         saved = await api.saveSkill(skill.name, skillSaveSchema.parse(skill));
       }
@@ -70,8 +71,7 @@ export function AgentIntegrationsPanel({ kind, active, onDirtyChange, onBusyChan
       <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="mcp-id">{t("integrations.id")}</Label><Input id="mcp-id" value={mcp.id} disabled={!!editing} placeholder="my-service" onChange={e => field("id", e.target.value)} /></div>
         <div className="space-y-2"><Label htmlFor="mcp-name">{t("integrations.name")}</Label><Input id="mcp-name" value={mcp.name} onChange={e => field("name", e.target.value)} /></div></div>
       <div className="space-y-2"><Label htmlFor="mcp-description">{t("integrations.description")}</Label><Input id="mcp-description" value={mcp.description} onChange={e => field("description", e.target.value)} /></div>
-      <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="mcp-transport">{t("integrations.transport")}</Label><select id="mcp-transport" className="h-9 w-full rounded-md border bg-background px-3" value={mcp.type} onChange={e => { field("type", e.target.value); field("secrets", ""); }}><option value="stdio">{t("integrations.local")}</option><option value="http">Streamable HTTP</option></select></div>
-        <div className="space-y-2"><Label htmlFor="mcp-exposure">{t("integrations.exposure")}</Label><select id="mcp-exposure" className="h-9 w-full rounded-md border bg-background px-3" value={mcp.exposure} onChange={e => field("exposure", e.target.value)}><option value="codemode">Code Mode</option><option value="deferred">Tool Search</option><option value="direct">{t("integrations.direct")}</option></select></div></div>
+      <div className="space-y-2"><Label htmlFor="mcp-transport">{t("integrations.transport")}</Label><select id="mcp-transport" className="h-9 w-full rounded-md border bg-background px-3" value={mcp.type} onChange={e => { field("type", e.target.value); field("secrets", ""); }}><option value="stdio">{t("integrations.local")}</option><option value="http">Streamable HTTP</option></select></div>
       {mcp.type === "stdio" ? <>
         <div className="space-y-2"><Label htmlFor="mcp-command">{t("integrations.command")}</Label><Input id="mcp-command" value={mcp.command} placeholder="npx" onChange={e => field("command", e.target.value)} /></div>
         <div className="space-y-2"><Label htmlFor="mcp-args">{t("integrations.args")}</Label><Textarea id="mcp-args" className="min-h-24 font-mono text-xs" value={mcp.args} onChange={e => field("args", e.target.value)} /></div>
@@ -101,7 +101,7 @@ export function AgentIntegrationsPanel({ kind, active, onDirtyChange, onBusyChan
     {kind === "mcp" ? api.data?.servers.map(server => <article key={server.id} className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3"><div className="flex gap-3"><Cable className="mt-1 size-5 shrink-0 text-muted-foreground" /><div><h3 className="font-medium">{server.name}</h3><p className="mt-1 text-sm text-muted-foreground">{server.description}</p></div></div>
         <Switch aria-label={t("integrations.toggle", { name: server.name })} checked={server.enabled} disabled={api.busy} onCheckedChange={enabled => void api.saveMcp(server.id, { name: server.name, description: server.description, enabled, exposure: server.exposure, config: server.config })} /></div>
-      <div className="flex flex-wrap gap-2 text-xs"><span className="rounded-md bg-muted px-2 py-1">{server.config.type === "http" ? "HTTP" : t("integrations.local")}</span><span className="rounded-md bg-muted px-2 py-1">{server.exposure === "deferred" ? "Tool Search" : server.exposure === "codemode" ? "Code Mode" : t("integrations.direct")}</span><span className="rounded-md bg-muted px-2 py-1">{t(server.enabled ? "integrations.on" : "integrations.off")}</span></div>
+      <div className="flex flex-wrap gap-2 text-xs"><span className="rounded-md bg-muted px-2 py-1">{server.config.type === "http" ? "HTTP" : t("integrations.local")}</span><span className="rounded-md bg-muted px-2 py-1">{t(server.enabled ? "integrations.on" : "integrations.off")}</span></div>
       <p className="text-xs text-muted-foreground">{server.setup}</p>
       {server.test && <details className="text-xs"><summary className={server.test.ok ? "cursor-pointer text-emerald-600" : "cursor-pointer text-destructive"}>{server.test.ok && <CheckCircle2 className="mr-1 inline size-3" />}{server.test.message} · {new Date(server.test.checkedAt).toLocaleString()}</summary><ul className="mt-2 max-h-40 space-y-1 overflow-auto">{server.test.tools.map(tool => <li key={tool.name}><span className="font-mono">{tool.name}</span>{tool.description && ` — ${tool.description}`}</li>)}</ul></details>}
       <div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" disabled={api.busy} onClick={() => open(server.id)}>{t("integrations.configure")}</Button><Button size="sm" variant="ghost" disabled={api.busy} onClick={() => void api.test(server.id)}><RotateCw className={api.busy ? "size-3 animate-spin" : "size-3"} />{t("integrations.test")}</Button>{server.sourceUrl && <a className="ml-auto inline-flex items-center gap-1 text-xs text-muted-foreground hover:underline" href={server.sourceUrl} target="_blank" rel="noreferrer">{t("integrations.source")}<ExternalLink className="size-3" /></a>}</div>

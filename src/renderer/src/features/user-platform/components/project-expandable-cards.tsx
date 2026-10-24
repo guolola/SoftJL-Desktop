@@ -10,7 +10,6 @@ import { ArrowUpRight, Clock3 } from "lucide-react";
 import { Badge } from "../../../shared/ui/badge.js";
 import { CraftButton, CraftButtonIcon, CraftButtonLabel } from "../../../shared/ui/craft-button.js";
 import type { StaticProject } from "../lib/project-presentation.js";
-import { ProjectModeBadge } from "./project-mode-badge.js";
 
 export function ProjectExpandableCards({ projects, onNavigate }: {
   projects: StaticProject[];
@@ -25,7 +24,6 @@ export function ProjectExpandableCards({ projects, onNavigate }: {
     src: project.background?.imageUrl,
     content: () => (
       <>
-        <ProjectModeBadge mode={project.projectMode} />
         {project.status === "archived" && <Badge variant="outline">{project.statusLabel}</Badge>}
         <p className="flex min-w-0 items-center gap-2"><Clock3 className="size-3.5 shrink-0" aria-hidden="true" /><span>{t("projects.updatedPrefix", { date: project.updatedAtDisplay })}</span></p>
       </>

@@ -4,25 +4,26 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { AppI18nProvider } from "../../../shared/i18n/index.js";
 import { i18n } from "../../../shared/i18n/i18n.js";
-import { WorkspaceRepositoryProvider, type WorkspaceRepository } from "../../../services/workspace-repository/index.js";
-import { createMockWorkspaceRepository } from "../../../services/workspace-repository/mock-repository.js";
 import { DiagramDownloadMenu } from "./diagram-download-menu.js";
 
 const mocks = vi.hoisted(() => ({ text: vi.fn(), blob: vi.fn(), success: vi.fn(), error: vi.fn() }));
 vi.mock("../../../shared/lib/download", () => ({ downloadTextFile: mocks.text, downloadBlobFile: mocks.blob }));
 vi.mock("../../../shared/ui/floating-alert", () => ({ floatingAlert: { success: mocks.success, error: mocks.error } }));
-const props = { diagramId: "sequence:first", diagramKind: "sequence" as const, fileStem: "design-sequence", svg: '<svg viewBox="0 0 100 100"><text>已保存</text></svg>', source: "@startuml\nAlice -> Bob\n@enduml" };
-function view(repository: WorkspaceRepository, input = props) {
-  return <AppI18nProvider><WorkspaceRepositoryProvider repository={repository}><DiagramDownloadMenu {...input} /></WorkspaceRepositoryProvider></AppI18nProvider>;
+const props = { projectId: "project", diagramId: "sequence:first", diagramKind: "sequence" as const, fileStem: "design-sequence", svg: '<svg viewBox="0 0 100 100"><text>已保存</text></svg>', source: "@startuml\nAlice -> Bob\n@enduml" };
+function view(repository: { exportDiagram?: unknown }, input = props) {
+  exportRequest = (input, _projectId, signal) => (repository.exportDiagram as (input: unknown, signal?: unknown) => unknown)(input, signal);
+  return <AppI18nProvider><DiagramDownloadMenu {...input} /></AppI18nProvider>;
 }
 async function choose(name: string) {
   await userEvent.click(screen.getByRole("button", { name: "下载" }));
   await userEvent.click(await screen.findByRole("menuitem", { name }));
 }
-beforeEach(async () => { vi.clearAllMocks(); await i18n.changeLanguage("zh-CN"); });
+vi.mock("../../../services/workspace-repository/run-actions-api.js", () => ({ exportDiagramRequest: (...args: unknown[]) => exportRequest(...args) }));
+let exportRequest: (...args: unknown[]) => unknown = vi.fn();
+beforeEach(async () => { exportRequest = vi.fn(); vi.clearAllMocks(); await i18n.changeLanguage("zh-CN"); });
 
 it("offers formats in order and downloads the saved SVG and source", async () => {
-  const repository = createMockWorkspaceRepository();
+  const repository = ({ exportDiagram: vi.fn() });
   repository.exportDiagram = vi.fn();
   render(view(repository));
   await userEvent.click(screen.getByRole("button", { name: "下载" }));
@@ -40,7 +41,7 @@ it.each([
   { format: "pdf", fileStem: "design-sequence" },
   { format: "png", fileStem: "requirements-sequence" },
 ] as const)("downloads $format with its saved source and $fileStem filename", async ({ format, fileStem }) => {
-  const repository = createMockWorkspaceRepository();
+  const repository = ({ exportDiagram: vi.fn() });
   const blob = new Blob(["output"]);
   repository.exportDiagram = vi.fn().mockResolvedValue(blob);
   render(view(repository, { ...props, fileStem }));
@@ -50,7 +51,7 @@ it.each([
 });
 
 it("explains missing artifacts and unsupported conversion without blocking SVG", async () => {
-  render(view(createMockWorkspaceRepository(), { ...props, source: "" }));
+  render(view(({ exportDiagram: vi.fn() }), { ...props, source: "" }));
   expect(screen.queryByText("PlantUML 源码尚未生成")).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "下载" }));
   expect(await screen.findByRole("menuitem", { name: "SVG" })).not.toHaveAttribute("aria-disabled", "true");
@@ -61,17 +62,17 @@ it("explains missing artifacts and unsupported conversion without blocking SVG",
   }
 });
 
-it("keeps source download available when SVG is missing and conversion is unsupported", async () => {
-  render(view(createMockWorkspaceRepository(), { ...props, svg: "" }));
+it("keeps source and server conversion available when SVG is missing", async () => {
+  render(view(({ exportDiagram: vi.fn() }), { ...props, svg: "" }));
   expect(screen.queryByText(/当前环境暂不支持 PNG、PDF 下载/)).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole("button", { name: "下载" }));
   expect(await screen.findByRole("menuitem", { name: /SVG/ })).toHaveAttribute("aria-disabled", "true");
   expect(screen.getByRole("menuitem", { name: "PlantUML" })).not.toHaveAttribute("aria-disabled", "true");
-  expect(screen.getByRole("menuitem", { name: "PNG" })).toHaveAttribute("aria-description", "当前环境暂不支持 PNG、PDF 下载");
+  expect(screen.getByRole("menuitem", { name: "PNG" })).not.toHaveAttribute("aria-disabled", "true");
 });
 
 it("blocks duplicate conversions and permits retry after failure", async () => {
-  const repository = createMockWorkspaceRepository();
+  const repository = ({ exportDiagram: vi.fn() });
   let reject!: (error: Error) => void;
   repository.exportDiagram = vi.fn().mockImplementationOnce(() => new Promise((_resolve, fail) => { reject = fail; })).mockResolvedValue(new Blob());
   render(view(repository));
@@ -87,7 +88,7 @@ it("blocks duplicate conversions and permits retry after failure", async () => {
 });
 
 it.each(["artifact", "diagram", "unmount", "route"])("cancels conversion after %s changes and suppresses a late response", async (change) => {
-  const repository = createMockWorkspaceRepository();
+  const repository = ({ exportDiagram: vi.fn() });
   let resolve!: (blob: Blob) => void;
   let signal!: AbortSignal;
   repository.exportDiagram = vi.fn((_input, passedSignal) => { signal = passedSignal!; return new Promise<Blob>((done) => { resolve = done; }); });
@@ -105,7 +106,7 @@ it.each(["artifact", "diagram", "unmount", "route"])("cancels conversion after %
 });
 
 it("supports keyboard selection and English labels", async () => {
-  const repository = createMockWorkspaceRepository();
+  const repository = ({ exportDiagram: vi.fn() });
   repository.exportDiagram = vi.fn().mockResolvedValue(new Blob());
   render(view(repository));
   await act(async () => { await i18n.changeLanguage("en"); });

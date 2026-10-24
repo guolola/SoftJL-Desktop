@@ -5,7 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { ProjectSettings } from "./project-settings.js";
 import { platformApi, type PlatformProject } from "../services/platform-api.js";
 
-const project: PlatformProject = { id: "project", name: "订单系统", description: null,  status: "active", projectMode: "professional", ownerUserId: "owner", updatedAt: "2026-01-01T00:00:00Z" };
+const project: PlatformProject = { id: "project", name: "订单系统", description: null,  status: "active", ownerUserId: "owner", updatedAt: "2026-01-01T00:00:00Z" };
 const members = [
   { id: "one", projectId: "project", userId: "owner", username: "owner", displayName: "Owner", role: "owner", status: "active" },
   { id: "two", projectId: "project", userId: "editor-id", username: "editor", displayName: "Editor", role: "editor", status: "active" },

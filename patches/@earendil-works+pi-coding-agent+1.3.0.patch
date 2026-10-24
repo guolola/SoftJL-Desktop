@@ -1,0 +1,68 @@
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js
+index 3f98859..6e5f6e3 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/branch-summarization.js
+@@ -103,6 +103,8 @@ export function prepareBranchEntries(entries, tokenBudget = 0) {
+     // This ensures we capture cumulative file tracking from nested branch summaries
+     // Only extract from pi-generated summaries (fromHook !== true), not extension-generated ones
+     for (const entry of entries) {
++        // Results are omitted from the summary text, but are required as execution evidence.
++        if (entry.type === "message") extractFileOpsFromMessage(entry.message, fileOps);
+         if (entry.type === "branch_summary" && !entry.fromHook && entry.details) {
+             const details = entry.details;
+             if (Array.isArray(details.readFiles)) {
+@@ -123,8 +125,6 @@ export function prepareBranchEntries(entries, tokenBudget = 0) {
+         const message = getMessageFromEntry(entry);
+         if (!message)
+             continue;
+-        // Extract file ops from assistant messages (tool calls)
+-        extractFileOpsFromMessage(message, fileOps);
+         const tokens = estimateTokens(message);
+         // Check budget before adding
+         if (tokenBudget > 0 && totalTokens + tokens > tokenBudget) {
+diff --git a/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js b/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js
+index ff5292a..cb2ec97 100644
+--- a/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js
++++ b/node_modules/@earendil-works/pi-coding-agent/dist/core/compaction/utils.js
+@@ -2,6 +2,9 @@
+  * Shared utilities for compaction and branch summarization.
+  */
+ import { contentText } from "@earendil-works/pi-ai";
++// Compaction walks forwards, while branch summaries walk backwards. Correlate
++// intent with a successful result in either order; denied/unfinished calls are not file changes.
++const fileOpEvidence = new WeakMap();
+ export function createFileOps() {
+     return {
+         read: new Set(),
+@@ -14,10 +17,19 @@ export function createFileOps() {
+  * recorded on a tool result.
+  */
+ export function extractFileOpsFromMessage(message, fileOps) {
++    let evidence = fileOpEvidence.get(fileOps);
++    if (!evidence) {
++        evidence = { calls: new Map(), results: new Map() };
++        fileOpEvidence.set(fileOps, evidence);
++    }
+     if (message.role === "toolResult") {
++        evidence.results.set(message.toolCallId, message.isError === false);
++        const issued = evidence.calls.get(message.toolCallId);
++        if (issued && message.isError === false)
++            addFileOp(issued.name, issued.arguments, fileOps);
+         // Calls made from codemode scripts are recorded on the script's result.
+         for (const call of message.nestedCalls?.calls ?? [])
+-            addFileOp(call.name, call.arguments, fileOps);
++            if (call.status === "ok") addFileOp(call.name, call.arguments, fileOps);
+         return;
+     }
+     if (message.role !== "assistant")
+@@ -31,7 +43,9 @@ export function extractFileOpsFromMessage(message, fileOps) {
+             continue;
+         if (!("arguments" in block) || !("name" in block))
+             continue;
+-        addFileOp(block.name, block.arguments, fileOps);
++        evidence.calls.set(block.id, block);
++        if (evidence.results.get(block.id) === true)
++            addFileOp(block.name, block.arguments, fileOps);
+     }
+ }
+ function addFileOp(toolName, args, fileOps) {

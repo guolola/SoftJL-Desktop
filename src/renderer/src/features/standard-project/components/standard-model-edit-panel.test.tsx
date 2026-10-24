@@ -5,12 +5,11 @@ import { expect, it, vi } from "vitest";
 import { validateStandardModel, type StandardDiagram, type StandardModel } from "../../../../../shared/contracts/index.js";
 import { modelReviewFixtures, standardModelFixture } from "../../../../../shared/contracts/testing/index.js";
 import { withWorkspaceProviders } from "../../../../../../tests/renderer/helpers/workspace-test-utils.js";
-import { createMockWorkspaceRepository } from "../../../services/workspace-repository/index.js";
 import { StandardModelEditPanel } from "./standard-model-edit-panel.js";
 
 function mount(model: StandardModel, onSave = vi.fn(async () => true as boolean | undefined)) {
   const diagram: StandardDiagram = { id: model.diagramKind, kind: model.diagramKind, title: model.title, model, status: "completed" };
-  render(withWorkspaceProviders(<StandardModelEditPanel diagram={diagram} disabled={false} readOnly={false} onSave={onSave} onSelectElement={() => undefined} />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardModelEditPanel diagram={diagram} disabled={false} readOnly={false} onSave={onSave} onSelectElement={() => undefined} />));
   return onSave;
 }
 

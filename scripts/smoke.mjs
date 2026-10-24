@@ -40,8 +40,7 @@ try {
       body: JSON.stringify({
         name: "Desktop smoke project",
         description: null,
-        projectMode: "standard",
-      }),
+        }),
     });
     if (!response.ok) throw new Error(await response.text());
     return response.json();

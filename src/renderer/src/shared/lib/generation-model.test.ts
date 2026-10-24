@@ -11,14 +11,11 @@ describe("generation model eligibility", () => {
     [{ ...valid, defaultModel: "" }, "选择用于生成的模型"],
     [{ ...valid, defaultModel: "removed" }, "已不可用"],
     [{ ...valid, providerModelOptions: [] }, "已不可用"],
-    [{ ...valid, providerConfigId: "offline-demo" }, "供应商"],
-    [{ ...valid, defaultModel: "offline-demo-fixed-artifacts", providerModelOptions: ["offline-demo-fixed-artifacts"] }, "已不可用"],
   ])("blocks invalid real settings %# but allows explicit demos", (settings, reason) => {
-    expect(generationModelBlockedReason("provider", settings)).toContain(reason);
-    expect(generationModelBlockedReason("offline-demo", settings)).toBeNull();
+    expect(generationModelBlockedReason(settings)).toContain(reason);
   });
   it("accepts a valid current catalog selection", () => {
-    expect(generationModelBlockedReason("provider", valid)).toBeNull();
+    expect(generationModelBlockedReason(valid)).toBeNull();
   });
   it.each(["", "removed"])("does not silently replace a missing or retired selection: %s", (defaultModel) => {
     localStorage.setItem(USER_SETTINGS_STORAGE_KEY, JSON.stringify({ ...valid, defaultModel }));

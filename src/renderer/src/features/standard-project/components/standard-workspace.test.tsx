@@ -6,7 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vitest";
 import { createStandardProjectState, type StandardProjectState } from "../../../../../shared/contracts/index.js";
 import { withWorkspaceProviders } from "../../../../../../tests/renderer/helpers/workspace-test-utils.js";
-import { createMockWorkspaceRepository } from "../../../services/workspace-repository/index.js";
 import { StandardWorkspace } from "./standard-workspace.js";
 import { standardApi } from "../services/standard-api.js";
 import { patchUserSettings } from "../../../shared/lib/user-settings.js";
@@ -33,8 +32,8 @@ beforeEach(async () => {
 it("shows the original capability cards in a dialog once for each newly created project", async () => {
   const user = userEvent.setup();
   const mount = (projectId = "p") => render(withWorkspaceProviders(
-    <StrictMode><StandardWorkspace {...props} projectId={projectId} /></StrictMode>, createMockWorkspaceRepository()));
-  queueProjectIntroduction("p", "standard");
+    <StrictMode><StandardWorkspace {...props} projectId={projectId} /></StrictMode>));
+  queueProjectIntroduction("p");
   const firstVisit = mount();
   const dialog = await screen.findByRole("dialog", { name: "用 Agent 开始快速建模" });
   const showcase = within(dialog).getByTestId("agent-feature-showcase");
@@ -55,7 +54,7 @@ it("shows the original capability cards in a dialog once for each newly created 
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   revisit.unmount();
 
-  queueProjectIntroduction("another-project", "standard");
+  queueProjectIntroduction("another-project");
   const otherVisit = mount("another-project");
   await screen.findByRole("dialog", { name: "用 Agent 开始快速建模" });
   await user.click(screen.getByRole("button", { name: "关闭介绍" }));
@@ -67,34 +66,34 @@ it("shows the original capability cards in a dialog once for each newly created 
 });
 
 it("does not show an introduction for existing projects or consume another project's introduction", async () => {
-  queueProjectIntroduction("new-project", "standard");
-  const existing = render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  queueProjectIntroduction("new-project");
+  const existing = render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   await screen.findByPlaceholderText("发送消息…");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   existing.unmount();
-  render(withWorkspaceProviders(<StandardWorkspace {...props} projectId="new-project" />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardWorkspace {...props} projectId="new-project" />));
   await screen.findByRole("dialog", { name: "用 Agent 开始快速建模" });
 });
 
 it("waits until the project loads before showing its introduction and does not repeat it after a reload", async () => {
   let finishLoading!: (value: { state: StandardProjectState }) => void;
   vi.mocked(standardApi.read).mockReturnValueOnce(new Promise(resolve => { finishLoading = resolve; }));
-  queueProjectIntroduction("p", "standard");
-  const mounted = render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  queueProjectIntroduction("p");
+  const mounted = render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await act(async () => finishLoading({ state }));
   await screen.findByRole("dialog", { name: "用 Agent 开始快速建模" });
   mounted.unmount();
-  render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   await screen.findByPlaceholderText("发送消息…");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
 it("localizes the new-project introduction and keeps it closed after Escape", async () => {
   localStorage.setItem(LOCALE_PREFERENCE_STORAGE_KEY, "en");
-  queueProjectIntroduction("p", "standard");
+  queueProjectIntroduction("p");
   const user = userEvent.setup();
-  render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   const dialog = await screen.findByRole("dialog", { name: "Start quick modeling with Agent" });
   expect(within(dialog).getByText("Generate 8 model types")).toBeInTheDocument();
   expect(within(dialog).getByRole("button", { name: "Start modeling" })).toBeInTheDocument();
@@ -104,12 +103,11 @@ it("localizes the new-project introduction and keeps it closed after Escape", as
 });
 
 it("preserves the pending introduction until the enclosing content is visible", async () => {
-  queueProjectIntroduction("p", "standard");
-  const repository = createMockWorkspaceRepository();
+  queueProjectIntroduction("p");
   const view = (ready: boolean) => withWorkspaceProviders(
     <RouteContentReadyProvider ready={ready}><RouteContentReadyProvider ready>
       <StandardWorkspace {...props} />
-    </RouteContentReadyProvider></RouteContentReadyProvider>, repository);
+    </RouteContentReadyProvider></RouteContentReadyProvider>);
   const mounted = render(view(false));
   await screen.findByPlaceholderText("发送消息…");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -125,11 +123,11 @@ it("opens the introduction immediately after authentication and project data are
     session: { id: "session", userId: "owner", createdAt: "now", expiresAt: "later", lastSeenAt: "now", ipAddress: null, userAgent: null },
   });
   const advance = async (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
-  queueProjectIntroduction("p", "standard");
+  queueProjectIntroduction("p");
   try {
     render(withWorkspaceProviders(<AuthenticatedRoute routeKey="/projects/p" showLoadingScreen onNavigate={vi.fn()}>
       <StandardWorkspace {...props} />
-    </AuthenticatedRoute>, createMockWorkspaceRepository()));
+    </AuthenticatedRoute>));
     await advance(0);
     expect(screen.queryByTestId("platform-loading-screen")).not.toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "用 Agent 开始快速建模" })).toBeInTheDocument();
@@ -142,9 +140,9 @@ it("centers the introduction within the content area and follows changes in side
   const measurement = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
     return this.dataset.testid === "standard-project-content" ? bounds : original.call(this);
   });
-  queueProjectIntroduction("p", "standard");
+  queueProjectIntroduction("p");
   try {
-    render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+    render(withWorkspaceProviders(<StandardWorkspace {...props} />));
     const dialog = await screen.findByRole("dialog", { name: "用 Agent 开始快速建模" });
     expect(dialog).toHaveStyle({ left: "880px", width: "1088px" });
     bounds = new DOMRect(48, 53, 1392, 720);
@@ -160,7 +158,7 @@ it("removes welcome badges and project examples before the server acknowledges t
   let acknowledge!: (value: { state: StandardProjectState }) => void;
   vi.mocked(standardApi.start).mockReturnValueOnce(new Promise(resolve => { acknowledge = resolve; }));
   const user = userEvent.setup();
-  render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   expect(await screen.findByTestId("agent-intro-badges")).toBeInTheDocument();
   expect(screen.queryByTestId("agent-feature-showcase")).not.toBeInTheDocument();
   expect(screen.getByRole("group", { name: "试试这些项目例子" })).toBeInTheDocument();
@@ -182,7 +180,7 @@ it("connects saved messages without adding a custom continuation panel to the so
   state.conversation = [{ id: "u", role: "user", text: "原有用户消息", status: "completed", createdAt: "now" }];
   state.run = { id: "r", operation: "chat", status: "stopped", startedAt: "now" };
   vi.mocked(standardApi.start).mockResolvedValue({ state });
-  render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   expect(await screen.findByText("原有用户消息")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Agent 聊天" })).toHaveAttribute("aria-current", "page");
   expect(screen.queryByRole("button", { name: "运行历史" })).not.toBeInTheDocument();
@@ -192,7 +190,7 @@ it("connects saved messages without adding a custom continuation panel to the so
 });
 it("omits saved requirements and result previews while keeping diagrams accessible from the sidebar", async () => {
   state = { ...createStandardProjectState("旧需求"), diagrams: { class: { id: "class", kind: "class", title: "图书类图", status: "completed", svg: "<svg/>" } } };
-  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   await screen.findByRole("button", { name: "展开 UML 模型" });
   const main = within(screen.getByRole("main"));
   expect(main.queryByText("已保存的需求描述")).not.toBeInTheDocument();
@@ -214,7 +212,7 @@ it("omits saved requirements and result previews while keeping diagrams accessib
   expect(standardApi.start).not.toHaveBeenCalled();
 });
 it("read-only projects cannot generate", async () => {
-  render(withWorkspaceProviders(<StandardWorkspace {...props} canEdit={false} />, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<StandardWorkspace {...props} canEdit={false} />));
   await userEvent.click(await screen.findByRole("button", { name: "测试" }));
   expect(screen.queryByRole("button", { name: "生成" })).not.toBeInTheDocument();
 });
@@ -226,7 +224,7 @@ it("opens the shared detail layout and keeps the selected diagram after saving a
   vi.mocked(standardApi.saveModel).mockImplementation(async (_, id, model) => ({ state: { ...state, diagrams: {
     ...state.diagrams, [id]: { ...state.diagrams[id], model, svg: '<svg><text>新图</text></svg>' },
   } } }));
-  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   await user.click(await screen.findByRole("button", { name: "展开 UML 模型" }));
   await user.click(screen.getByRole("button", { name: "设计类图" }));
   expect(screen.getByRole("heading", { name: "图书类图" })).toBeInTheDocument();
@@ -247,7 +245,7 @@ it.each([
   state.description = "图书管理";
   state.diagrams.borrow = { id: "borrow", kind, title: `借阅 · ${label}`, status: "completed", svg: '<svg><text>借阅模型</text></svg>' };
   state.diagrams.return = { id: "return", kind, title: `归还 · ${label}`, status: "completed", svg: '<svg><text>归还模型</text></svg>' };
-  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   await user.click(await screen.findByRole("button", { name: "展开 UML 模型" }));
   await user.click(screen.getByRole("button", { name: label }));
   expect(screen.getByPlaceholderText("发送消息…")).toBeInTheDocument();
@@ -271,7 +269,7 @@ it.each([
 it("opens the overall usecase model directly at the second level without role views or custom header actions", async () => {
   state.description = "图书管理";
   state.diagrams.usecase = { id: "usecase", kind: "usecase", title: "总体用例图", status: "completed", svg: '<svg><text>总体用例</text></svg>' };
-  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />, createMockWorkspaceRepository()));
+  const user = userEvent.setup(); render(withWorkspaceProviders(<StandardWorkspace {...props} />));
   await user.click(await screen.findByRole("button", { name: "展开 UML 模型" }));
   expect(screen.queryByRole("button", { name: "展开 用例图" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "用例图" }));
@@ -287,7 +285,7 @@ it("reuses the floating alert for failed requests without a page banner or setti
   state.diagrams.class = { id: "class", kind: "class", title: "类图", status: "completed" };
   const user = userEvent.setup();
   vi.mocked(standardApi.start).mockRejectedValue(new Error("The request is invalid. Check it and try again."));
-  render(withWorkspaceProviders(<FloatingAlertProvider><StandardWorkspace {...props} /></FloatingAlertProvider>, createMockWorkspaceRepository()));
+  render(withWorkspaceProviders(<FloatingAlertProvider><StandardWorkspace {...props} /></FloatingAlertProvider>));
   await user.type(await screen.findByPlaceholderText("发送消息…"), "生成测试用例");
   await user.click(screen.getByRole("button", { name: "发送消息" }));
   const message = await screen.findByText("The request is invalid. Check it and try again.");

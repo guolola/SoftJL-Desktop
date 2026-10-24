@@ -2,7 +2,7 @@
 export interface DesktopBridge {
   chooseProjectWorkspace(): Promise<{ selectionId: string; directory: string } | null>;
   assignProjectWorkspace(projectId: string, selectionId: string): Promise<string>;
-  chooseConversationDirectory(projectId: string): Promise<string | null>;
+  chooseConversationDirectory(projectId: string, request?: import("./contracts/workspace/conversation-coding.js").ConversationDirectoryRequest): Promise<string | null>;
   showApplicationMenu(locale: "zh-CN" | "en"): Promise<void>;
   setWindowColors(colors: { color: string; symbolColor: string }): Promise<void>;
 }

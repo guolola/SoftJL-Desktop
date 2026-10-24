@@ -3,7 +3,7 @@ import { MessagePrimitive, ThreadPrimitive, useAuiState } from "@assistant-ui/re
 import { useContext } from "react";
 import { useTranslation } from "react-i18next";
 import type { StandardConversationMessage } from "../../../../../../../shared/contracts/index.js";
-import { assistantActivityGroup, conversationDate, conversationDay } from "../../../lib/conversation-presentation.js";
+import { assistantActivityGroup, assistantIntroductionIds, conversationDate, conversationDay } from "../../../lib/conversation-presentation.js";
 import { AssistantMessage, UserMessage } from "../source/messages.js";
 import { EditComposer } from "../source/composer.js";
 import { DisclosureTrigger, disclosureContentClass } from "../source/trace.js";
@@ -13,6 +13,10 @@ import { questionRoundForMessage } from "../../../lib/conversation-question-flow
 import { DaySeparator } from "./elements/day-separator.js";
 import { ProjectToolCall, ProjectToolTimeline, useToolPresentation } from "./project-tools.js";
 import { ConversationCodingContext } from "../../../hooks/use-conversation-coding.js";
+import { hasConversationArtifacts } from "../../../lib/conversation-artifacts.js";
+import { ConversationMessageDialogs } from "../../conversation-coding.js";
+import { isPermissionDialog } from "../../../lib/conversation-dialog-presentation.js";
+import { MarkdownText } from "../source/elements/markdown-text.js";
 
 const activityComponents = { Reasoning, tools: { Fallback: ProjectToolCall } };
 
@@ -28,15 +32,29 @@ function MessageActivity({ attention = false }: { attention?: boolean } = {}) {
   </>;
 }
 
-function MessageAttention() { return <MessageActivity attention />; }
+function MessageAttention() {
+  const messageId = useAuiState(s => s.message.id);
+  return <><MessageActivity attention /><ConversationMessageDialogs messageId={messageId} /></>;
+}
 function MessageAnswer() { return <AssistantMessage hideActivity />; }
+function MessageResult() { return <AssistantMessage hideActivity hideText />; }
+function MessageIntroduction() {
+  const parts = useAuiState(s => s.message.parts);
+  return <div data-role="assistant" data-slot="assistant-introduction" className="w-full text-[15px] leading-relaxed wrap-break-word">
+    {parts.map((part, index) => part.type === "text" && part.text.trim()
+      ? <MessagePrimitive.PartByIndex key={index} index={index} components={{ Text: MarkdownText }} /> : null)}
+  </div>;
+}
 
 function ProjectAssistantRun({ messages }: { messages: readonly StandardConversationMessage[] }) {
   const { state } = useHomeDemo();
   const coding = useContext(ConversationCodingContext);
-  const approval = coding?.approvals.some(item => item.runId === state.run?.id && messages.some(message => message.tools?.some(tool => tool.id === item.toolCallId)));
+  const prompts = state.run?.status === "running" ? coding?.approvals.filter(item => item.runId === state.run?.id && messages.some(message => message.tools?.some(tool => tool.id === item.toolCallId))) ?? [] : [];
+  const approval = prompts.some(isPermissionDialog);
+  const answering = prompts.length > 0 && !approval;
   const { text } = useToolPresentation();
   const thread = useAuiState(s => s.thread.messages);
+  const introductions = assistantIntroductionIds(messages);
   const latest = messages.at(-1)!;
   const round = state.rounds.at(-1);
   const waiting = !!round?.questions.length && !round.answers.length && latest.id === state.conversation?.at(-1)?.id;
@@ -47,10 +65,10 @@ function ProjectAssistantRun({ messages }: { messages: readonly StandardConversa
   const stopped = state.run?.status === "stopped" && latest.id === state.conversation?.at(-1)?.id;
   // Tool completion is only a boundary between model calls. Keep the disclosure
   // open until this user turn settles, including snapshots between those calls.
-  const active = !approval && (thinking || executing || (!waiting && latest.id === state.conversation?.at(-1)?.id && state.run?.status === "running"));
+  const active = !approval && !answering && (thinking || executing || (!waiting && latest.id === state.conversation?.at(-1)?.id && state.run?.status === "running"));
   const hasActivity = messages.some(message => message.reasoning?.trim() || message.tools?.length || message.status === "streaming");
-  const status = approval ? "waiting" : executing ? "running" : thinking ? "thinking" : waiting ? "waiting" : stopped ? "stopped" : failed ? "failed" : "completed";
-  const label = approval ? text("等待审批", "Waiting for approval") : executing ? text("正在执行", "Running") : thinking ? text("正在推理", "Thinking")
+  const status = approval || answering ? "waiting" : executing ? "running" : thinking ? "thinking" : waiting ? "waiting" : stopped ? "stopped" : failed ? "failed" : "completed";
+  const label = approval ? text("等待审批", "Waiting for approval") : answering ? text("等待回答", "Waiting for answers") : executing ? text("正在执行", "Running") : thinking ? text("正在推理", "Thinking")
     : waiting ? text("等待回答", "Waiting for answers") : stopped ? text("处理已停止", "Stopped")
       : failed ? text("处理失败或已中断", "Failed or interrupted") : text("推理过程", "Reasoning");
   // Each child retains its original message scope for tool status, question forms, feedback and regeneration.
@@ -60,6 +78,7 @@ function ProjectAssistantRun({ messages }: { messages: readonly StandardConversa
       components={{ AssistantMessage: component, UserMessage, EditComposer }} />;
   };
   return <div data-slot="run-activity" data-status={status} className="mx-auto flex w-full min-w-0 max-w-(--thread-max-width) flex-col gap-3">
+    {messages.filter(message => introductions.has(message.id)).map(message => renderMessage(message, MessageIntroduction))}
     {/* The shared root owns live expansion, manual folding and scroll locking for both single and merged reasoning. */}
     {hasActivity && <ReasoningRoot variant="ghost" streaming={active} className="my-1 mb-3">
       <DisclosureTrigger live={active} label={label} />
@@ -72,8 +91,10 @@ function ProjectAssistantRun({ messages }: { messages: readonly StandardConversa
       </ReasoningContent>
     </ReasoningRoot>}
     {messages.map(message => renderMessage(message, MessageAttention))}
-    {messages.map((message, index) => message.text.trim() || message.attachments?.length || questionRoundForMessage(state, message.id) || (waiting && index === messages.length - 1)
-      ? renderMessage(message, MessageAnswer) : null)}
+    {messages.map((message, index) => message.text.trim() || message.attachments?.length || hasConversationArtifacts(message) || questionRoundForMessage(state, message.id) || (waiting && index === messages.length - 1)
+      // Keep generated files, forms, errors and message actions after execution;
+      // only pre-execution text was moved above the shared reasoning container.
+      ? renderMessage(message, introductions.has(message.id) ? MessageResult : MessageAnswer) : null)}
   </div>;
 }
 

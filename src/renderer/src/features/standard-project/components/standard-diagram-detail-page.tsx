@@ -1,4 +1,4 @@
-// Composes ordinary models with the same detail header, canvas, overview and responsive editor as professional projects.
+// Composes saved conversation models with their preview, overview and responsive editor.
 import { useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { StandardDiagram, StandardModel } from "../../../../../shared/contracts/index.js";
@@ -13,8 +13,8 @@ import { mobileTouchTargetClass } from "../../workspace-shell/components/mobile-
 import { buildStandardDiagramDetail } from "../lib/standard-diagram-detail.js";
 import { StandardModelEditPanel } from "./standard-model-edit-panel.js";
 
-export function StandardDiagramDetailPage({ diagram, disabled, canEdit, onSave }: {
-  diagram: StandardDiagram; disabled: boolean; canEdit: boolean;
+export function StandardDiagramDetailPage({ projectId, diagram, disabled, canEdit, onSave }: {
+  projectId: string; diagram: StandardDiagram; disabled: boolean; canEdit: boolean;
   onSave: (model: StandardModel) => Promise<boolean | undefined>;
 }) {
   const { t } = useTranslation();
@@ -62,7 +62,7 @@ export function StandardDiagramDetailPage({ diagram, disabled, canEdit, onSave }
           {(["diagram", "elements", "relations"] as const).map(value => <TabsTrigger key={value} value={value} className={`relative flex-none border-0 px-2 after:absolute after:inset-x-2 after:bottom-0 after:hidden after:h-0.5 data-active:after:block ${mobileTouchTargetClass}`}>{t(`diagrams.tabs.${value}`)}</TabsTrigger>)}
         </TabsList></div>}
         <TabsContent value="diagram" className="m-0 w-full min-w-0 p-0">
-          <DiagramPreviewPanel stage="design" type={diagram.kind === "er" ? "class" : diagram.kind}
+          <DiagramPreviewPanel projectId={projectId} stage="design" type={diagram.kind === "er" ? "class" : diagram.kind}
             diagramId={`standard:${diagram.id}`} exportFileStem={diagram.title} plantUmlSource={diagram.source ?? ""}
             normalizedSvgMarkup={svg} svgMarkup={svg} svgUrl={viewport.svgUrl} svgScale={viewport.svgScale}
             svgCanvasRef={viewport.svgCanvasRef} isPanning={viewport.isPanning} svgPanOffset={viewport.svgPanOffset}

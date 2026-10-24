@@ -145,7 +145,6 @@ create table auth_tokens (
 create table projects (
   id text primary key,
   name text not null,
-  project_mode text not null check (project_mode in ('standard', 'professional')),
   description text,
   status text not null default 'active',
   owner_user_id text not null references users(id),

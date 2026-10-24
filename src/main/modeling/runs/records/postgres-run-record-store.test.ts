@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { RunEvent } from "../../../../shared/contracts/index.js";
 import type { Queryable } from "../../db/transactions.js";
-import { createEmptySnapshot } from "./snapshots.js";
+import { createEmptySnapshot as createSnapshot } from "./snapshots.js";
 import {
   createPostgresRunRecordStore,
 } from "./postgres-run-record-store.js";
@@ -152,20 +152,14 @@ class FakeRunDb implements Queryable {
   }
 }
 
-function attachProviderSettings(snapshot: ReturnType<typeof createEmptySnapshot>) {
-  snapshot.providerSettings = {
-    modelCapability: strictTestModelCapability("gpt-5.5"),
-    apiBaseUrl: "https://ai.comfly.org",
-    apiKey: "redacted",
-    model: "gpt-5.5",
-  };
+function createEmptySnapshot(runId: string) {
+  const snapshot = createSnapshot(runId);
+  snapshot.standardRun = { operation: "chat", providerConfigId: "provider-default", model: "gpt-5.5", baseline: {}, artifacts: [] };
+  return snapshot;
 }
-
+function attachProviderSettings(snapshot: ReturnType<typeof createEmptySnapshot>) { snapshot.standardRun!.model = "gpt-5.5"; }
 function attachManagedProviderSettings(snapshot: ReturnType<typeof createEmptySnapshot>) {
-  snapshot.providerSettings = {
-    providerConfigId: "provider-deepseek-v4pro",
-    model: "deepseek-ai/DeepSeek-V4-Pro",
-  };
+  snapshot.standardRun = { ...snapshot.standardRun!, providerConfigId: "provider-deepseek-v4pro", model: "deepseek-ai/DeepSeek-V4-Pro" };
 }
 
 function countRunRecordWrites(db: FakeRunDb) {
@@ -173,21 +167,6 @@ function countRunRecordWrites(db: FakeRunDb) {
     call.sql.replace(/\s+/g, " ").trim().toLowerCase().startsWith("insert into run_records"),
   ).length;
 }
-
-test("postgres run store restores offline execution metadata without exposing it in snapshots", async () => {
-  const db = new FakeRunDb();
-  const runs = await createPostgresRunRecordStore(db);
-  const snapshot = createEmptySnapshot("offline-run", "演示需求", [], []);
-  attachManagedProviderSettings(snapshot);
-  snapshot.status = "completed";
-  runs.set(snapshot.runId, { snapshot, events: [], listeners: new Set(), terminal: true,
-    metadata: { projectId: "project-1", createdAt: "2026-09-23T00:00:00.000Z", offlineDemoFixture: "library-seat" } });
-  await runs.flush();
-  assert.equal(db.runRows.get(snapshot.runId)?.provider_config_id, null);
-  const restored = (await (await createPostgresRunRecordStore(db)).refreshRun(snapshot.runId))!;
-  assert.equal(restored.metadata?.offlineDemoFixture, "library-seat");
-  assert.equal("_offlineDemoFixture" in restored.snapshot, false);
-});
 
 test("postgres run store persists records and emitted events", async () => {
   const db = new FakeRunDb();
@@ -215,7 +194,7 @@ test("postgres run store persists records and emitted events", async () => {
   assert.equal(db.runRows.get("run-1")?.project_id, "project-1");
   assert.equal(db.runRows.get("run-1")?.status, "completed");
   assert.equal(db.runRows.get("run-1")?.model, "gpt-5.5");
-  assert.equal(db.runRows.get("run-1")?.provider_config_id, null);
+  assert.equal(db.runRows.get("run-1")?.provider_config_id, "provider-default");
   assert.equal(db.eventRows.length, 2);
   assert.equal(db.eventRows[1]?.sequence, 2);
   assert.deepEqual(db.eventRows[1]?.payload, {
@@ -316,51 +295,12 @@ test("postgres run store persists managed provider config ids", async () => {
   assert.equal(row?.provider_config_id, "provider-deepseek-v4pro");
 });
 
-test("postgres run store persists retry and rerun source metadata", async () => {
-  const db = new FakeRunDb();
-  const runs = await createPostgresRunRecordStore(db);
-  const snapshot = createEmptySnapshot("run-retry", "需求文本", ["usecase"], []);
-  const record: RunRecord = {
-    snapshot,
-    events: [],
-    listeners: new Set(),
-    terminal: false,
-    metadata: {
-      userId: "user-1",
-      projectId: "project-1",
-      sourceRunId: "run-source",
-      sourceAction: "retry",
-      sourceRunStatus: "failed",
-      createdAt: "2026-05-22T00:00:00.000Z",
-    },
-  };
-
-  runs.set("run-retry", record);
-  await runs.flush();
-
-  const row = db.runRows.get("run-retry");
-  assert.equal(row?.source_run_id, "run-source");
-  assert.equal(row?.source_action, "retry");
-  assert.equal(row?.source_run_status, "failed");
-
-  const restored = await createPostgresRunRecordStore(db);
-  const restoredRecord = await restored.refreshRun("run-retry");
-  assert.equal(restoredRecord?.metadata?.sourceRunId, "run-source");
-  assert.equal(restoredRecord?.metadata?.sourceAction, "retry");
-  assert.equal(restoredRecord?.metadata?.sourceRunStatus, "failed");
-});
-
 test("postgres run store restores abandoned active runs as interrupted", async () => {
   const db = new FakeRunDb();
   const snapshot = createEmptySnapshot("run-interrupted", "需求文本", ["usecase"], []);
   snapshot.status = "running";
   snapshot.currentStage = "generate_models";
-  snapshot.providerSettings = {
-    modelCapability: strictTestModelCapability("gpt-5.5"),
-    apiBaseUrl: "https://ai.comfly.org",
-    apiKey: "redacted",
-    model: "gpt-5.5",
-  };
+  attachProviderSettings(snapshot);
   db.runRows.set("run-interrupted", {
     id: "run-interrupted",
     user_id: "user-1",
@@ -386,47 +326,6 @@ test("postgres run store restores abandoned active runs as interrupted", async (
   assert.equal(db.runRows.get("run-interrupted")?.status, "failed");
   assert.equal(db.runRows.get("run-interrupted")?.error_code, "RUN_INTERNAL_ERROR");
   assert.ok(db.runRows.get("run-interrupted")?.completed_at);
-});
-
-test("postgres run store preserves active rows when bullmq queue mode is enabled", async () => {
-  const previousQueueMode = process.env.UML_RUN_QUEUE_MODE;
-  process.env.UML_RUN_QUEUE_MODE = "bullmq";
-
-  try {
-    const db = new FakeRunDb();
-    const snapshot = createEmptySnapshot("run-worker-owned", "需求文本", ["usecase"], []);
-    snapshot.status = "running";
-    snapshot.currentStage = "generate_models";
-    db.runRows.set("run-worker-owned", {
-      id: "run-worker-owned",
-      user_id: "user-1",
-      project_id: "project-1",
-      snapshot,
-      status: "running",
-      stage: "generate_models",
-      error_message: null,
-      created_at: "2026-05-22T00:00:00.000Z",
-      updated_at: "2026-05-22T00:01:00.000Z",
-      completed_at: null,
-    });
-
-    const restored = await createPostgresRunRecordStore(db);
-    assert.equal(restored.size, 0);
-    assert.equal(db.calls.length, 0);
-    const record = await restored.refreshRun("run-worker-owned");
-    await restored.flush();
-
-    assert.equal(record?.terminal, false);
-    assert.equal(record?.snapshot.status, "running");
-    assert.equal(record?.events.some((event) => event.type === "failed"), false);
-    assert.equal(db.runRows.get("run-worker-owned")?.status, "running");
-  } finally {
-    if (previousQueueMode === undefined) {
-      delete process.env.UML_RUN_QUEUE_MODE;
-    } else {
-      process.env.UML_RUN_QUEUE_MODE = previousQueueMode;
-    }
-  }
 });
 
 test("postgres run store refreshes records updated by another process", async () => {

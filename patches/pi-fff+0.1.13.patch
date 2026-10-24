@@ -1,0 +1,25 @@
+diff --git a/node_modules/pi-fff/src/index.ts b/node_modules/pi-fff/src/index.ts
+index 32e6df6..0aa1044 100644
+--- a/node_modules/pi-fff/src/index.ts
++++ b/node_modules/pi-fff/src/index.ts
+@@ -83,7 +83,8 @@ export default function (pi: ExtensionAPI) {
+ 	});
+ 
+ 	pi.on("session_start", async (_event, ctx) => {
+-		runtime?.dispose();
++		// An embedded host can replace a session before asynchronous indexing finishes.
++		if (runtime) { await runtime.ensure(); runtime.dispose(); }
+ 		runtime = new FffRuntime(ctx.cwd);
+ 		await restoreFeatures();
+ 		applyUiConfiguration(ctx);
+@@ -107,7 +108,9 @@ export default function (pi: ExtensionAPI) {
+ 	});
+ 
+ 	pi.on("session_shutdown", async () => {
+-		runtime?.dispose();
++		const closing = runtime;
+ 		runtime = null;
++		// Drain startup before disposal so its completion cannot recreate a live native finder.
++		if (closing) { await closing.ensure(); closing.dispose(); }
+ 	});
+ }

@@ -1,63 +1,50 @@
 // Hosts authenticated project, account, and provider pages backed by the platform API.
-import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from "../../../shared/ui/drawer.js";
-import { Avatar, AvatarFallback } from "../../../shared/ui/avatar.js";
-import { useIsMobile } from "../../../shared/hooks/use-mobile.js";
-import Forbidden403 from '../../../shared/template/views/pages/misc/forbidden-403/index.js';
-import ServerError500 from '../../../shared/template/views/pages/misc/server-error-500/index.js';
-import NotFound404 from '../../../shared/template/views/pages/misc/error-page-404/index.js';
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
 import type { TFunction } from "i18next";
-import { createPortal } from "react-dom";
+import {
+Loader2
+} from "lucide-react";
+import {
+createContext,
+useCallback,
+useContext,
+useEffect,
+useMemo,
+useRef,
+useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { localizeCaughtFailure } from "../../../shared/i18n/api-errors.js";
-import {
-  Activity,
-  Clock3,
-  Loader2,
-  Settings,
-  Users,
-  X,
-} from "lucide-react";
+import NotFound404 from '../../../shared/template/views/pages/misc/error-page-404/index.js';
+import Forbidden403 from '../../../shared/template/views/pages/misc/forbidden-403/index.js';
+import ServerError500 from '../../../shared/template/views/pages/misc/server-error-500/index.js';
 
-import { Button } from "../../../shared/ui/button.js";
 import { PageHeader } from "../../../shared/template/layout/page.js";
+import { Button } from "../../../shared/ui/button.js";
 
-import { cn } from "../../../shared/ui/utils.js";
-import {
-  ProjectGenerationTasksDrawerContent,
-} from "../../workspace-shell/components/top-bar.js";
-import {
-  AUTH_SESSION_CHANGED_EVENT,
-  PlatformApiError,
-  platformApi,
-  type PlatformDocument,
-  type PlatformProject,
-  type PlatformProjectMember,
-  type PlatformRunSummary,
-  type PlatformAccountProfileResponse,
-  type PlatformUser,
-} from "../services/platform-api.js";
-import {
-  PlatformLoadingCoordinatorProvider,
-  PlatformLoadingScreen,
-  usePlatformLoadingCoordinatorState,
-  usePlatformRouteLoading,
-} from "./platform-loading-screen.js";
-import { AuthenticatedRouteSessionProvider } from "./authenticated-route-session.js";
-import { ManagedProviderSettingsSync } from "./managed-provider-settings-sync.js";
 import { PROJECT_RUNS_REUSE_MS } from "../../../services/workspace-repository/project-run-reads.js";
 import { RouteContentReadyProvider } from "../../../shared/lib/route-content-readiness.js";
+import {
+AUTH_SESSION_CHANGED_EVENT,
+PlatformApiError,
+platformApi,
+type PlatformAccountProfileResponse,
+type PlatformDocument,
+type PlatformProject,
+type PlatformProjectMember,
+type PlatformRunSummary,
+type PlatformUser,
+} from "../services/platform-api.js";
+import { AuthenticatedRouteSessionProvider } from "./authenticated-route-session.js";
+import { ManagedProviderSettingsSync } from "./managed-provider-settings-sync.js";
+import {
+PlatformLoadingCoordinatorProvider,
+PlatformLoadingScreen,
+usePlatformLoadingCoordinatorState,
+usePlatformRouteLoading,
+} from "./platform-loading-screen.js";
 import { ProjectHistory } from "./project-history.js";
 import { ProjectMembers } from "./project-members.js";
-import { PageFrame, SectionCard } from "./project-page-layout.js";
+import { PageFrame,SectionCard } from "./project-page-layout.js";
 import { ProjectSettings } from "./project-settings.js";
 export { ProjectNewPage } from "./project-new-page.js";
 export { ProjectsIndexPage } from "./projects-index-page.js";
@@ -66,7 +53,6 @@ type Navigate = (path: string) => void;
 
 const ACTIVE_RUNS_REFRESH_MS = 8_000;
 
-export type ProjectDrawerKind = "tasks" | "members" | "history" | "settings";
 
 type ProjectOverviewState = {
   loading: boolean;
@@ -445,221 +431,6 @@ export function ProjectSectionPage({
         )}
       </section>
     </PageFrame>
-  );
-}
-
-const projectDrawerMeta: Record<
-  ProjectDrawerKind,
-  {
-    titleKey: string;
-    descriptionKey: string;
-    icon: typeof Users;
-    width: "compact" | "history" | "wide";
-  }
-> = {
-  tasks: {
-    titleKey: "projectShell.drawer.tasks",
-    descriptionKey: "projectShell.drawer.tasksDescription",
-    icon: Activity,
-    width: "wide",
-  },
-  members: {
-    titleKey: "projectShell.drawer.members",
-    descriptionKey: "projectShell.drawer.membersDescription",
-    icon: Users,
-    width: "compact",
-  },
-  history: {
-    titleKey: "projectShell.drawer.history",
-    descriptionKey: "projectShell.drawer.historyDescription",
-    icon: Clock3,
-    width: "history",
-  },
-  settings: {
-    titleKey: "projectShell.drawer.settings",
-    descriptionKey: "projectShell.drawer.settingsDescription",
-    icon: Settings,
-    width: "wide",
-  },
-};
-
-function DesktopDrawerOverlay({ onClose }: { onClose: () => void }) {
-  if (typeof document === "undefined") return null;
-
-  return createPortal(
-    <div
-      data-slot="drawer-overlay"
-      aria-hidden="true"
-      className="fixed inset-0 z-[60] bg-black/45"
-      onPointerDown={onClose}
-    />,
-    document.body,
-  );
-}
-
-function ProjectDrawerShell({
-  open,
-  kind,
-  projectName,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  kind: ProjectDrawerKind;
-  projectName: string;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  const isMobile = useIsMobile();
-  const meta = projectDrawerMeta[kind];
-  const Icon = meta.icon;
-  const title = t(meta.titleKey);
-  const widthClass =
-    kind === "tasks"
-      ? "max-w-full data-[vaul-drawer-direction=right]:sm:max-w-3xl"
-      : meta.width === "history"
-      ? "max-w-full data-[vaul-drawer-direction=right]:sm:max-w-6xl"
-      : kind === "members"
-      ? "max-w-full data-[vaul-drawer-direction=right]:sm:max-w-2xl"
-      : "max-w-full data-[vaul-drawer-direction=right]:sm:max-w-md";
-
-  return (
-    <div data-testid="project-workspace-drawer-layer">
-      {/* Desktop side drawers keep the page scrollbar so opening them cannot shift the workspace. */}
-      {!isMobile && open ? <DesktopDrawerOverlay onClose={onClose} /> : null}
-      <Drawer
-        direction={isMobile ? "bottom" : "right"}
-        modal={isMobile}
-        open={open}
-        onOpenChange={(next) => { if (!next) onClose(); }}
-      >
-        <DrawerContent
-          data-testid="project-workspace-drawer"
-          className={cn("max-w-full gap-0 overflow-x-hidden overflow-y-hidden", !isMobile && "z-[70]", widthClass, kind === "tasks" && isMobile && "h-[90dvh]")}
-        >
-          <DrawerHeader className="flex-row items-center justify-between gap-3 p-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <Avatar className="size-9.5 rounded-sm after:border-0">
-                <AvatarFallback className="bg-primary/10 text-primary size-9.5 shrink-0 rounded-sm [&>svg]:size-4.75">
-                  <Icon className="size-5" aria-hidden="true" />
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <DrawerTitle className="text-base font-semibold">
-                  {title}
-                </DrawerTitle>
-                <DrawerDescription className="truncate text-sm">
-                  {projectName}
-                </DrawerDescription>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("projectShell.drawer.close", { title })}
-              onClick={onClose}
-            >
-              <X className="size-4" />
-            </Button>
-          </DrawerHeader>
-          <div
-            data-testid="project-workspace-drawer-body"
-            className={cn("min-h-0 min-w-0 flex-1 overflow-x-hidden px-4 py-4", kind === "tasks" ? "flex flex-col overflow-y-hidden" : "overflow-y-auto")}
-          >
-            {children}
-          </div>
-        </DrawerContent>
-      </Drawer>
-    </div>
-  );
-}
-
-export function ProjectWorkspaceDrawer({
-  projectId,
-  activeDrawer,
-  onClose,
-  onNavigate,
-  preferredTaskRunId,
-}: {
-  projectId: string;
-  activeDrawer: ProjectDrawerKind | null;
-  onClose: () => void;
-  onNavigate?: Navigate;
-  preferredTaskRunId?: string | null;
-}) {
-  const { t } = useTranslation();
-  const overview = useProjectOverview(projectId);
-  // Unmount closed drawers so their modal focus lock cannot outlive the panel.
-  const drawerKind = activeDrawer;
-  if (!drawerKind) return null;
-
-  const projectName =
-    overview.project?.name ??
-    (overview.loading ? t("projectShell.loadingProject") : t("projectShell.projectFallback", { projectId }));
-  const accessMessage = renderAccessMessage(overview, t, onNavigate);
-  const handleProjectDeleted = () => {
-    onClose();
-    onNavigate?.("/projects");
-  };
-  let content: React.ReactNode;
-
-  if (overview.loading) {
-    content = (
-      <div className="flex items-center gap-2 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        {t("projectShell.loadingProjectData")}
-      </div>
-    );
-  } else if (accessMessage || !overview.project) {
-    content = accessMessage;
-  } else if (drawerKind === "tasks") {
-    content = (
-      <ProjectGenerationTasksDrawerContent
-        projectId={projectId}
-        projectRuns={overview.runs}
-        preferredRunId={preferredTaskRunId}
-      />
-    );
-  } else if (drawerKind === "settings") {
-    content = (
-      <ProjectSettings
-        project={overview.project}
-        membershipRole={overview.membership?.role ?? null}
-        layout="drawer"
-        onProjectDeleted={handleProjectDeleted}
-      />
-    );
-  } else if (drawerKind === "members") {
-    content = (
-      <ProjectMembers
-        project={overview.project}
-        members={overview.members}
-        membershipRole={overview.membership?.role ?? null}
-        layout="drawer"
-      />
-    );
-  } else {
-    content = (
-      <ProjectHistory
-        projectId={projectId}
-        initialRuns={overview.runs}
-        members={overview.members}
-        layout="drawer"
-      />
-    );
-  }
-
-  return (
-    <ProjectDrawerShell
-      open={Boolean(activeDrawer)}
-      kind={drawerKind}
-      projectName={projectName}
-      onClose={onClose}
-    >
-      {content}
-    </ProjectDrawerShell>
   );
 }
 

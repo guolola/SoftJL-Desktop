@@ -9,6 +9,7 @@ afterEach(() => vi.useRealTimers());
 function mount(direction = "ltr") {
   const viewport = document.createElement("div");
   viewport.style.cssText = `overflow-y:auto;scrollbar-gutter:stable both-edges;scrollbar-width:thin;padding:0 24px;direction:${direction}`;
+  Object.defineProperties(viewport, { scrollHeight: { configurable: true, value: 1000 }, clientHeight: { configurable: true, value: 500 } });
   const content = document.createElement("div");
   viewport.append(content);
   document.body.append(viewport);
@@ -50,4 +51,16 @@ it("restarts the lock when toggled again and removes it when unmounted", () => {
   fireEvent.scroll(hook.viewport);
   expect(hook.viewport.scrollTop).toBe(180);
   hook.viewport.remove();
+});
+
+it("allows automatic following through disclosure changes while already at the bottom", () => {
+  const hook = mount();
+  hook.viewport.scrollTop = 500;
+  act(() => hook.result.current());
+  expect(vi.getTimerCount()).toBe(0);
+  Object.defineProperty(hook.viewport, "scrollHeight", { value: 1300 });
+  hook.viewport.scrollTop = 800;
+  fireEvent.scroll(hook.viewport);
+  expect(hook.viewport.scrollTop).toBe(800);
+  hook.unmount(); hook.viewport.remove();
 });

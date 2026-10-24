@@ -26,7 +26,7 @@ function compile(source: string) {
   assert.doesNotMatch(result.stdout, /Syntax Error|An error has occurred/);
   return result.stdout;
 }
-for (const stage of ["feasibility", "requirements", "design"] as const) for (const schema of getStageModelSchemas(stage)) {
+for (const stage of ["requirements", "design"] as const) for (const schema of getStageModelSchemas(stage)) {
   const kind = schema.shape.diagramKind.value;
   test(`${stage}/${kind}: actual PlantUML compile and model coverage`, () => {
     const model = modelFixture(stage, kind);

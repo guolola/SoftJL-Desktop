@@ -31,7 +31,7 @@ describe("matchAppRoute dashboard", () => {
   ])("excludes the hosted-only route %s", (path) => {
     expect(matchAppRoute(path)).toEqual({ kind: "not-found", path });
   });
-  it.each(["lineage", "history", "settings", "documents"])(
+  it.each(["history", "settings", "members"])(
     "matches the project %s page",
     (section) => {
       expect(matchAppRoute(`/projects/project%20one/${section}`)).toEqual({
@@ -70,6 +70,6 @@ it.each(["/login", "/register"])(
     });
   },
 );
-it.each(["/projects/local-project/code", "/projects/connections", "/account/connections", "/projects/local-project/members"])("desktop excludes retired route %s", (path) => {
+it.each(["/projects/local-project/code", "/projects/local-project/lineage", "/projects/local-project/documents", "/projects/connections", "/account/connections"])("desktop excludes retired route %s", (path) => {
   expect(matchAppRoute(path)).toEqual({ kind: "not-found", path });
 });

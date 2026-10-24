@@ -36,14 +36,14 @@ const ConversionRateCard = ({ title, subTitle, totalConversion, conversionTrend,
       </CardHeader>
       <CardContent className='flex flex-1 flex-col justify-between gap-4'>
         <div className='flex items-center gap-4'>
-          <div className='flex items-center gap-3'>
+          <div className='flex shrink-0 items-center gap-3'>
             <span className='text-3xl font-semibold'>{totalConversion === null ? t('noData') : `${totalConversion}%`}</span>
             <div className='flex shrink-0 items-center gap-1' title={t('successChange')}>
               {percentageChange !== 0 && conversionTrend === 'up' ? (<ChevronUpIcon className='size-4'/>) : (percentageChange !== 0 && conversionTrend && <ChevronDownIcon className='size-4'/>)}
               <span className='text-sm whitespace-nowrap'>{percentageChange === null ? '—' : percentageChange === 0 ? t('successUnchanged') : t('successPoints', { value: `${percentageChange > 0 ? '+' : ''}${percentageChange}` })}</span>
             </div>
           </div>
-          <ChartContainer config={{ conversion: { label: t('success') } }} className='h-20 w-full'>
+          <ChartContainer config={{ conversion: { label: t('success') } }} className='h-20 min-w-0 flex-1'>
             <AreaChart data={chartData} margin={{
             left: 4,
             right: 4

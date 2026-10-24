@@ -12,9 +12,9 @@ describe('dashboard view model', () => {
     summary.projects[1].successRate = 0
     const view = buildDashboardViewModel(summary, t, 'zh-CN')
     expect(view.conversion.totalConversion).toBe(66.7)
-    expect(view.table.find(project => project.id === 'p-1')?.progress).toMatchObject({ completed: 15, total: 20, percentage: 75 })
-    expect(view.table[1].progress?.details).toContain('progressStageNames.document: 0/3')
-    expect(view.table[1].progress?.details).toContain('progressStageNames.design: 5/7')
+    expect(view.table.find(project => project.id === 'p-1')?.progress).toMatchObject({ completed: 8, total: 10, percentage: 80 })
+    expect(view.table[1].progress?.details).toContain('progressStageNames.document: 1/2')
+    expect(view.table[1].progress?.details).toContain('progressStageNames.design: 4/5')
   })
   it('does not substitute success rate when an older response lacks workflow progress', () => {
     const summary = dashboardFixture(1)

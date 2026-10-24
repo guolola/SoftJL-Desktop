@@ -3,43 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as contracts from "./index.js";
 
-const REQUIRED_RUNTIME_EXPORTS = [
-  "diagramKindSchema",
-  "designDiagramKindSchema",
-  "requirementRulesResultSchema",
-  "requirementBaselineSchema",
-  "diagramModelsResultSchema",
-  "designDiagramModelsResultSchema",
-  "runSnapshotSchema",
-  "designRunSnapshotSchema",
-  "documentRunSnapshotSchema",
-  "runEventSchema",
-  "startRunRequestSchema",
-  "startDesignRunRequestSchema",
-  "startDocumentRunRequestSchema",
-  "startFeasibilityRunRequestSchema",
-  "feasibilityInputsSchema",
-  "feasibilityImplementationPlanSchema",
-  "feasibilityCandidateImplementationSchema",
-  "completeFeasibilityImplementationPlanSchema",
-  "feasibilityRunSnapshotSchema",
-  "contextDiagramSpecSchema",
-  "providerConfigListResponseSchema",
-  "projectDtoSchema",
-  "accountProfileResponseSchema",
-  "adminRolePermissions",
-  "documentLibraryListResponseSchema",
-  "renderSvgResponseSchema",
-  "snapshotInputFingerprint",
-  "designInputFingerprint",
-  "designRecordBelongsToDiagramKinds",
-  "findModelByDiagramKind",
-  "modelRecordBelongsToDiagramKinds",
-  "resolveModelArtifactIdentity",
-  "designTraceabilityTouchesDiagramKinds",
-  "systemNoticeListResponseSchema",
-  "apiErrorResponseSchema",
-] as const;
+const REQUIRED_RUNTIME_EXPORTS = ["standardProjectStateSchema", "storedStandardProjectStateSchema", "standardModelSchema", "standardDiagramKinds", "standardAttachmentSchema", "runSnapshotSchema", "runEventSchema", "providerConfigListResponseSchema", "projectDtoSchema", "accountProfileResponseSchema", "documentLibraryListResponseSchema", "renderSvgResponseSchema", "apiErrorResponseSchema"] as const;
 
 test("contracts keep required runtime public exports available", () => {
   for (const exportName of REQUIRED_RUNTIME_EXPORTS) {

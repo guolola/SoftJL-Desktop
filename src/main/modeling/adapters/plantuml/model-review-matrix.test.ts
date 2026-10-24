@@ -51,7 +51,7 @@ test("real rendered relationship symbols and ownership must agree with the model
   assert.ok(verifySvgMapping(draw(moved.source), expected.renderMapping, architecture.modelId!, "architecture").findings.some((item) => item.code === "wrong-svg-owner" && item.elementId === "c"));
 });
 
-for (const stage of ["feasibility", "requirements", "design"] as ModelingStage[]) for (const schema of getStageModelSchemas(stage)) {
+for (const stage of ["requirements", "design"] as ModelingStage[]) for (const schema of getStageModelSchemas(stage)) {
   const kind = schema.shape.diagramKind.value;
   test(`${stage}.${kind}: real legal complex SVGs pass and removed nodes/links cannot pass`, { timeout: 90000 }, () => {
     for (const { name, model } of modelReviewFixtures(stage, kind)) {

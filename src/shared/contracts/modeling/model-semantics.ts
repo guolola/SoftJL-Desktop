@@ -3,11 +3,11 @@ import { validateSequenceLifecycle } from "./sequence-lifecycle.js";
 import { contractFieldSchema, unknownContractFields } from "./model-json-schema.js";
 import { useCaseParticipationGaps } from "./usecase-participation.js";
 import {
-  diagramModelSpecSchema, designDiagramModelSpecSchema, feasibilityActivityDiagramSpecSchema, contextDiagramSpecSchema,
+  diagramModelSpecSchema, designDiagramModelSpecSchema,
   type DiagramModelSpec, type DesignDiagramModelSpec, type TableDiagramSpec,
 } from "./models.js";
 
-export type ModelingStage = "feasibility" | "requirements" | "design";
+export type ModelingStage = "requirements" | "design";
 export type AnyDiagramModel = DiagramModelSpec | DesignDiagramModelSpec;
 export interface ModelDiagnostic {
   modelId: string;
@@ -25,7 +25,6 @@ export interface ModelDiagnostic {
 export interface ModelGraphElement { id: string; kind: string; name: string; path: string; ownerId?: string; dataType?: string }
 
 export function getStageModelSchemas(stage: ModelingStage) {
-  if (stage === "feasibility") return [contextDiagramSpecSchema, feasibilityActivityDiagramSpecSchema];
   return stage === "design" ? designDiagramModelSpecSchema.options : diagramModelSpecSchema.options;
 }
 
@@ -238,7 +237,7 @@ export function validateModelSemantics(model: AnyDiagramModel, stage: ModelingSt
     case "activity": {
       const lanes = new Set(model.swimlanes.map((item) => item.id));
       const initial = model.nodes.filter((node) => node.type === "start");
-      if (!initial.length || (stage === "feasibility" && initial.length !== 1)) report("activity-initial", "nodes", stage === "feasibility" ? "可行性业务流程约定恰有一个起点" : "活动需要起点");
+      if (!initial.length) report("activity-initial", "nodes", "活动需要起点");
       if (!model.nodes.some((node) => node.type === "end" || node.type === "flow_final")) report("activity-final", "nodes", "当前流程模型需要显式终止节点");
       model.nodes.forEach((node, i) => {
         ref(node.actorOrLane, lanes, `nodes.${i}.actorOrLane`);

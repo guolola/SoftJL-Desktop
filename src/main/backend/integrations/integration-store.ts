@@ -117,7 +117,8 @@ export class IntegrationStore {
     const skillPaths = await Promise.all(state.skills.filter(item => item.enabled).map(async skill => {
       const content = `---\nname: ${skill.name}\ndescription: ${JSON.stringify(skill.description)}\n---\n\n${skill.content}`;
       const revision = createHash("sha256").update(content).digest("hex").slice(0, 20);
-      const path = join(this.directory, "skills", `${skill.id}-${revision}`);
+      // Keep the Skill directory name equal to its frontmatter name, as required by the native loader.
+      const path = join(this.directory, "skills", `${skill.id}-${revision}`, skill.name);
       await mkdir(path, { recursive: true });
       await writeFile(join(path, "SKILL.md"), content, { mode: 0o600 });
       return path;

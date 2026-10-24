@@ -41,7 +41,7 @@ it("binds a folder selected before creation and retries a failed binding without
   const choose = vi.fn().mockResolvedValue({ selectionId: "selection-1", directory: "D:\\projects\\new" });
   const assign = vi.fn().mockRejectedValueOnce(new Error("目录暂不可用")).mockResolvedValue("D:\\projects\\new");
   vi.stubGlobal("desktop", { chooseProjectWorkspace: choose, assignProjectWorkspace: assign });
-  const create = vi.spyOn(platformApi, "createProject").mockResolvedValue({ project: { id: "p1", name: "新项目", description: null, projectMode: "standard", status: "active", ownerUserId: "owner", updatedAt: "2026-10-23T00:00:00Z" } });
+  const create = vi.spyOn(platformApi, "createProject").mockResolvedValue({ project: { id: "p1", name: "新项目", description: null, status: "active", ownerUserId: "owner", updatedAt: "2026-10-23T00:00:00Z" } });
   render(<ProjectCreateForm onNavigate={vi.fn()} />);
   await userEvent.type(screen.getByLabelText("项目名称"), "新项目");
   await userEvent.click(screen.getByRole("button", { name: "选择文件夹" }));

@@ -74,7 +74,6 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId } = request.params as { projectId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "view_project");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard") return reply.code(409).send(createHttpErrorResponse(reply));
     const workspace = await authStore.getProjectWorkspace(projectId);
     let state = readStandardState(workspace.state, context.project.description ?? "");
     // Only reconcile runs older than this process. A live start may be between its database commit and controller registration.
@@ -88,7 +87,6 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId } = request.params as { projectId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "start_runs");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard") return reply.code(409).send(createHttpErrorResponse(reply));
     const state = await updateStandardState(authStore, projectId, context.user.id, state => {
       if (!active(state)) return;
       controllers.get(state.run!.id)?.abort();
@@ -107,7 +105,7 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId } = request.params as { projectId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "update_project");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard" || context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
+    if (context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
     const parsed = z.object({ description: z.string().trim().min(1).max(60000) }).safeParse(request.body);
     if (!parsed.success) return reply.code(400).send(createHttpErrorResponse(reply));
     try {
@@ -124,7 +122,7 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId, messageId } = request.params as { projectId: string; messageId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "update_project");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard" || context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
+    if (context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
     const body = z.object({ type: z.enum(["positive", "negative"]) }).safeParse(request.body);
     if (!body.success) return reply.code(400).send(createHttpErrorResponse(reply));
     try {
@@ -140,7 +138,6 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId } = request.params as { projectId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "start_runs");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard") return reply.code(409).send(createHttpErrorResponse(reply));
     if (context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
     const parsed = commandSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send(createHttpErrorResponse(reply, { issues: parsed.error.issues }));
@@ -279,7 +276,7 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId, diagramId } = request.params as { projectId: string; diagramId: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "update_project");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard" || context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
+    if (context.project.status !== "active") return reply.code(409).send(createHttpErrorResponse(reply));
     const current = readStandardState((await authStore.getProjectWorkspace(projectId)).state);
     if (active(current)) return reply.code(409).send(createHttpErrorResponse(reply));
     const diagram = current.diagrams[diagramId];
@@ -297,7 +294,6 @@ export function registerStandardProjectRoutes(deps: {
     const { projectId, kind } = request.params as { projectId: string; kind: string };
     const context = await requireProjectPermission(request, reply, authStore, projectId, "view_project");
     if (isProjectPermissionError(context)) return context;
-    if (context.project.projectMode !== "standard") return reply.code(409).send(createHttpErrorResponse(reply));
     if (kind !== "requirementsSpec" && kind !== "softwareDesignSpec") return reply.code(404).send(createHttpErrorResponse(reply));
     const state = readStandardState((await authStore.getProjectWorkspace(projectId)).state);
     if (!state.documents?.[kind]) return reply.code(404).send(createHttpErrorResponse(reply));

@@ -44,7 +44,7 @@ export function createStandardResourceReadTool(root = standardModelingResourceRo
     readFile: readManaged,
     detectImageMimeType: async () => null,
   } });
-  return { ...tool, label: "读取建模规范", description: "读取平台提供的 SKILL.md 和 Markdown 参考资料。支持绝对路径或相对技能资源根目录的路径，以及 offset/limit 分页。不能读取项目源码、凭证或其他宿主机文件。" };
+  return { ...tool, name: "read_resource", label: "读取建模规范", description: "读取平台提供的 SKILL.md 和 Markdown 参考资料。支持绝对路径或相对技能资源根目录的路径，以及 offset/limit 分页。不能读取项目源码、凭证或其他宿主机文件。" };
 }
 
 export type StandardGuidanceTask = StandardDiagramKind | "tests" | "requirementsSpec" | "softwareDesignSpec";

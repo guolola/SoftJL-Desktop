@@ -5,6 +5,5 @@ import { postJson, requestJson } from "../../../services/api-client/index.js";
 const path = (id: string) => `/api/desktop/projects/${encodeURIComponent(id)}/conversation-code`;
 export const conversationCodingApi = {
   read: async (id: string, signal?: AbortSignal) => conversationCodingStatusSchema.parse(await requestJson(path(id), { signal })),
-  clear: async (id: string) => conversationCodingStatusSchema.parse(await requestJson(path(id), { method: "DELETE" })),
-  decide: (projectId: string, approvalId: string, runId: string, allow: boolean) => postJson(`${path(projectId)}/approvals/${encodeURIComponent(approvalId)}`, { runId, allow }),
+  decide: (projectId: string, approvalId: string, runId: string, value: string | boolean | null) => postJson(`${path(projectId)}/approvals/${encodeURIComponent(approvalId)}`, { runId, value }),
 };

@@ -1,4 +1,4 @@
-// Defines the project run summaries shared by history, overview, and lineage readers.
+// Defines the project run summaries shared by history and overview readers.
 import type { RunOperationType, DocumentKind, DiagramKind, DesignDiagramKind, RunTokenConsumption, RunError } from "../../../../shared/contracts/index.js";
 
 export interface ProjectRunSummary {

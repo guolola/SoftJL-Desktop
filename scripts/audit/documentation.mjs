@@ -145,7 +145,8 @@ for (const forbiddenPrefix of ["data/", "resources/public/sandpack/", "tmp/"]) {
   if (offenders.length) report(forbiddenPrefix, `禁止跟踪该目录中的 ${offenders.length} 个文件`);
 }
 
-const expectedTechnicalDocs = ["docs/README.md", "docs/architecture/platform-overview.md", "docs/architecture/trusted-generation.md", "docs/development/desktop-runtime.md", "docs/integrations/openai-compatible-provider.md"];
+// Only the public guides linked from the root README belong in the published documentation set.
+const expectedTechnicalDocs = ["docs/README.md", "docs/architecture/platform-overview.md", "docs/architecture/modeling-capabilities.md", "docs/development/desktop-runtime.md", "docs/integrations/agent-integrations.md"];
 for (const file of expectedTechnicalDocs) {
   if (!markdownFiles.includes(file)) report(file, "技术文档索引缺失");
 }

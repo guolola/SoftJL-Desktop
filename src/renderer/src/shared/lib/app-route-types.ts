@@ -4,7 +4,7 @@ export type ShellRoutePath = "/workspace";
 export type AuthRoutePath = "/login" | "/register";
 
 export type ProjectRouteSection =
-  "lineage" | "settings" | "members" | "history" | "documents";
+  "settings" | "members" | "history";
 
 export type AppRoute =
   | { kind: "shell"; path: ShellRoutePath }

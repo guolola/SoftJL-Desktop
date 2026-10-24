@@ -1,85 +1,17 @@
 // Builds project route response payloads without owning endpoint authorization.
 import {
-  projectDtoSchema,
-  projectInvitationDtoSchema,
-  projectMemberRolePermissions,
-  assertCurrentWorkspaceState,
+projectDtoSchema,
+projectInvitationDtoSchema,
+projectMemberRolePermissions
 } from "../../../shared/contracts/index.js";
-import { toProjectDto, toProjectMemberDto } from "../auth/dto.js";
-import { isOfflineDemoProject } from "../runs/demo/offline-demo-config.js";
+import { toProjectDto,toProjectMemberDto } from "../auth/dto.js";
 import type {
-  AuthStore,
-  ProjectMemberRecord,
-  ProjectRecord,
+AuthStore,
+ProjectMemberRecord,
+ProjectRecord,
 } from "../auth/in-memory-auth-store.js";
 
 const DEFAULT_PROJECT_WORKSPACE_BODY_LIMIT_BYTES = 50 * 1024 * 1024;
-
-const stableProjectWorkspaceDefaults = {
-  requirementText: "",
-  selectedDiagramTypes: [],
-  rules: [],
-  models: {},
-  requirementModelTraceability: [],
-  generatedDiagramTypes: [],
-  plantUml: {},
-  svgArtifacts: {},
-  diagramErrors: {},
-  selectedDesignDiagramTypes: [],
-  designModels: {},
-  designModelTraceability: [],
-  generatedDesignDiagramTypes: [],
-  designPlantUml: {},
-  designSvgArtifacts: {},
-  designDiagramErrors: {},
-  manualModelEditStatus: {},
-
-
-  requirementInputFingerprint: null,
-  diagramInputFingerprints: {},
-  designInputFingerprints: {},
-  rulesVersion: 0,
-  rulesBasedOnTextVersion: null,
-  diagramVersions: {},
-} satisfies Record<string, unknown>;
-
-export function projectWorkspaceBodyLimitBytes() {
-  const parsed = Number(process.env.UML_PROJECT_WORKSPACE_BODY_LIMIT_BYTES);
-  return Number.isFinite(parsed) && parsed > 0
-    ? Math.floor(parsed)
-    : DEFAULT_PROJECT_WORKSPACE_BODY_LIMIT_BYTES;
-}
-
-export function isWorkspaceSourceRunConstraintError(error: unknown) {
-  const candidate = error as { code?: unknown; constraint?: unknown };
-  return (
-    candidate.code === "23503" &&
-    candidate.constraint === "project_workspace_states_source_run_id_fkey"
-  );
-}
-
-export function projectWorkspacePayload(
-  workspace: Awaited<ReturnType<AuthStore["getProjectWorkspace"]>>,
-) {
-  assertCurrentWorkspaceState(workspace.state);
-  const state = { ...workspace.state };
-  if (state.standardProject && typeof state.standardProject === "object") {
-    // Pi's tool history stays server-owned; clients receive the separate user-facing conversation.
-    const { piSession: _session, ...publicProject } = state.standardProject as Record<string, unknown>;
-    state.standardProject = publicProject;
-  }
-  return {
-    projectId: workspace.projectId,
-    version: workspace.version,
-    state: {
-      ...stableProjectWorkspaceDefaults,
-      ...state,
-    },
-    updatedByUserId: workspace.updatedByUserId,
-    sourceRunId: workspace.sourceRunId,
-    updatedAt: workspace.updatedAt,
-  };
-}
 
 export function toProjectInvitationDto(input: {
   member: Parameters<typeof toProjectMemberDto>[0];
@@ -105,8 +37,6 @@ export function projectPayload(input: {
 }) {
   return {
     project: toProjectDto(input.project),
-    generationExecutionMode: isOfflineDemoProject(input.project.id, input.project.name)
-      ? "offline-demo" as const : "provider" as const,
     membership: toProjectMemberDto(input.member),
     currentUserRole: input.member.role,
     capabilities: projectMemberRolePermissions[input.member.role],

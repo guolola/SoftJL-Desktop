@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createStandardProjectState, type StandardProjectState } from '../../../../../shared/contracts/index.js';
 import { withWorkspaceProviders } from '../../../../../../tests/renderer/helpers/workspace-test-utils.js';
-import { createMockWorkspaceRepository } from '../../../services/workspace-repository/index.js';
 import { LanguagePreferenceMenu } from '../../../shared/i18n/components/language-preference-menu.js';
 import { i18n } from '../../../shared/i18n/index.js';
 import { standardProjectEn, standardProjectZh } from '../../../shared/i18n/standard-project-resources.js';
@@ -22,8 +21,7 @@ beforeEach(async () => {
 });
 afterEach(async () => { localStorage.clear(); await act(() => i18n.changeLanguage('zh-CN')); });
 function mount() {
-  const repository = createMockWorkspaceRepository(); repository.listDocuments = vi.fn(async () => []);
-  return render(withWorkspaceProviders(<StandardWorkspace projectId="p" canEdit header={<LanguagePreferenceMenu />} onNavigate={vi.fn()} onOpenAccount={vi.fn()} />, repository));
+  return render(withWorkspaceProviders(<StandardWorkspace projectId="p" canEdit header={<LanguagePreferenceMenu />} onNavigate={vi.fn()} onOpenAccount={vi.fn()} />));
 }
 
 it('switches source and platform labels while preserving the draft', async () => {

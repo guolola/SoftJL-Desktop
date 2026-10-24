@@ -1,4 +1,4 @@
-// Shares provider token usage and meter semantics between quick and engineering modeling.
+// Shares provider token usage and meter semantics for conversation modeling.
 export type TokenUsage = {
   totalTokens?: number;
   /** Distinguishes the last provider call from the live session context total. */

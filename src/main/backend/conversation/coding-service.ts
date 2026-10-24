@@ -1,98 +1,117 @@
-// Keeps native directory grants and short-lived approvals separate from the durable modeling/Pi history.
+// Hosts Pi's select/input/confirm protocol; permission and questionnaire decisions stay in their plugins.
 import { randomUUID } from "node:crypto";
-import { realpath, stat } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve } from "node:path";
-import type { ConversationApproval, ConversationCodingStatus } from "../../../shared/contracts/workspace/conversation-coding.js";
+import { mkdir, realpath, stat } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative } from "node:path";
+import type { ExtensionUIContext, ExtensionUIDialogOptions } from "@earendil-works/pi-coding-agent";
+import type { ConversationApproval, ConversationCodingStatus, ConversationDirectoryRequest } from "../../../shared/contracts/workspace/conversation-coding.js";
 import type { ConversationCodingHost } from "../../modeling/adapters/coding/conversation-coding-host.js";
 import { codingExtension } from "./coding-tools.js";
+import { desktopPiPackages, piPackagePath, preparePiWorkspace } from "./pi-packages.js";
 
-export const insideDirectory = (root: string, target: string) => {
+const insideDirectory = (root: string, target: string) => {
   const path = relative(root, target);
   return path === "" || (!path.startsWith("..\\") && !path.startsWith("../") && path !== ".." && !isAbsolute(path));
 };
-
-// Resolve the nearest existing ancestor too: a new file below an escaping junction is still outside the grant.
-export async function scopedPath(root: string, input: string): Promise<string> {
-  if (!input || input.includes("\0")) throw new Error("无效项目路径");
-  if (await realpath(root) !== root) throw new Error("项目目录已变化，请重新选择");
-  const target = resolve(root, input);
-  if (!insideDirectory(root, target)) throw new Error("只能访问用户选择的项目目录");
-  let ancestor = target;
-  while (true) {
-    try {
-      if (!insideDirectory(root, await realpath(ancestor))) throw new Error("不能通过链接访问项目目录之外的文件");
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      const parent = dirname(ancestor);
-      if (parent === ancestor) throw error;
-      ancestor = parent;
-    }
-  }
-  return target;
-}
-
 type DirectoryStore = { read: (id: string) => Promise<string | null>; write: (id: string, path: string | null) => Promise<void> };
-type Pending = { projectId: string; approval: ConversationApproval; finish: (error?: Error) => void };
+type Answer = string | boolean | null;
+type Pending = { projectId: string; approval: ConversationApproval; finish: (value: Answer) => void };
 export class ConversationCodingService implements ConversationCodingHost {
+  private readonly notices = new Map<string, NonNullable<ConversationCodingStatus["notices"]>>();
+  private readonly activeTools = new Map<string, { id: string; name: string; arguments: Record<string, unknown> }>();
   private readonly pending = new Map<string, Pending>();
   private readonly runs = new Map<string, { runId: string; controller: AbortController }>();
   private readonly changing = new Set<string>();
   constructor(private readonly store: DirectoryStore, private readonly protectedDirectory: string) {}
-
   async status(projectId: string): Promise<ConversationCodingStatus> {
-    return { directory: await this.store.read(projectId), busy: this.runs.has(projectId) || this.changing.has(projectId),
+    return { directory: await this.store.read(projectId), notices: this.notices.get(projectId) ?? [], busy: this.runs.has(projectId) || this.changing.has(projectId),
       approvals: [...this.pending.values()].filter(item => item.projectId === projectId).map(item => item.approval) };
   }
-  async select(projectId: string, directory: string | null) {
-    if (this.runs.has(projectId) || this.changing.has(projectId)) throw new Error("请先停止当前任务或等待目录保存，再切换项目目录");
-    // Reserve the project before filesystem/database awaits so another window cannot start tools against a changing grant.
+  async select(projectId: string, directory: string | null, request?: ConversationDirectoryRequest) {
+    // A running task may receive its first workspace only through its own pending native chooser.
+    const waiting = request ? this.pending.get(request.approvalId) : undefined;
+    const assertWaiting = () => {
+      if (!request || !waiting || this.pending.get(request.approvalId) !== waiting || waiting.projectId !== projectId
+        || waiting.approval.dialog !== "directory" || waiting.approval.runId !== request.runId
+        || this.runs.get(projectId)?.runId !== request.runId || !directory) throw new Error("文件夹选择请求已失效");
+    };
+    if (request) assertWaiting();
+    if ((!request && this.runs.has(projectId)) || this.changing.has(projectId)) throw new Error("请先停止当前任务或等待目录保存，再切换项目目录");
     this.changing.add(projectId);
     try {
-    let canonical: string | null = null;
-    if (directory !== null) {
-      canonical = await realpath(directory);
-      const protectedPath = await realpath(this.protectedDirectory);
-      if (!(await stat(canonical)).isDirectory() || dirname(canonical) === canonical
-        || insideDirectory(canonical, protectedPath) || insideDirectory(protectedPath, canonical))
-        throw new Error("请选择具体项目文件夹，不能选择磁盘根目录或应用数据目录");
-    }
-    await this.store.write(projectId, canonical);
+      let canonical: string | null = null;
+      if (directory !== null) {
+        canonical = await realpath(directory);
+        const protectedPath = await realpath(this.protectedDirectory);
+        if (!(await stat(canonical)).isDirectory() || dirname(canonical) === canonical
+          || insideDirectory(canonical, protectedPath) || insideDirectory(protectedPath, canonical))
+          throw new Error("请选择具体项目文件夹，不能选择磁盘根目录或应用数据目录");
+      }
+      if (request) { assertWaiting(); if (await this.store.read(projectId)) throw new Error("当前任务已有代码目录"); assertWaiting(); }
+      await this.store.write(projectId, canonical);
+      if (request) { assertWaiting(); waiting!.finish(canonical); }
     } finally { this.changing.delete(projectId); }
     return this.status(projectId);
   }
-  approve(projectId: string, runId: string, id: string, allow: boolean) {
+  answer(projectId: string, runId: string, id: string, value: Answer) {
     const item = this.pending.get(id);
     if (!item || item.projectId !== projectId || item.approval.runId !== runId || this.runs.get(projectId)?.runId !== runId)
-      throw new Error("此审批已失效，请刷新当前会话");
-    item.finish(allow ? undefined : new Error("用户拒绝本次操作；不得自动重试或绕过审批"));
+      throw new Error("此交互已失效，请刷新当前会话");
+    const prompt = item.approval;
+    if (prompt.dialog === "directory" && value !== null) throw new Error("请通过本机文件夹选择器选择目录");
+    if (value !== null && (prompt.dialog === "confirm" ? typeof value !== "boolean"
+      : typeof value !== "string" || (prompt.dialog === "select" && !prompt.options?.includes(value)))) throw new Error("回答不符合插件提供的选项");
+    item.finish(value);
   }
-  async request(projectId: string, approval: Omit<ConversationApproval, "id">, signal: AbortSignal) {
-    signal.throwIfAborted();
-    if (this.runs.get(projectId)?.runId !== approval.runId) throw new Error("编码任务已结束");
+  private async dialog(projectId: string, runId: string, directory: string, signal: AbortSignal,
+    dialog: ConversationApproval["dialog"], title: string, extra: Partial<ConversationApproval>, opts?: ExtensionUIDialogOptions): Promise<Answer> {
+    const combined = AbortSignal.any([signal, ...(opts?.signal ? [opts.signal] : [])]);
+    if (combined.aborted) return null;
     const id = randomUUID();
-    await new Promise<void>((resolveRequest, reject) => {
-      const abort = () => finish(new Error("操作已取消"));
-      const timer = setTimeout(() => finish(new Error("审批等待超时，本次操作未执行")), 5 * 60_000);
-      const finish = (error?: Error) => {
-        clearTimeout(timer); signal.removeEventListener("abort", abort); this.pending.delete(id);
-        if (error) reject(error); else resolveRequest();
-      };
-      this.pending.set(id, { projectId, approval: { ...approval, id }, finish });
-      signal.addEventListener("abort", abort, { once: true });
-      if (signal.aborted) abort();
+    const active = this.activeTools.get(projectId);
+    return new Promise(resolve => {
+      const finish = (answer: Answer) => { clearTimeout(timer); combined.removeEventListener("abort", abort); this.pending.delete(id); resolve(answer); };
+      const abort = () => finish(null);
+      const timer = dialog === "directory" ? undefined : setTimeout(abort, opts?.timeout ?? 5 * 60_000);
+      this.pending.set(id, { projectId, approval: { id, runId, toolCallId: active?.id ?? "", tool: active?.name ?? "pi_dialog", arguments: active?.arguments, title, directory, detail: "", dialog, ...extra }, finish });
+      combined.addEventListener("abort", abort, { once: true });
+      if (combined.aborted) abort();
     });
-    signal.throwIfAborted();
   }
-  async open(...[projectId, runId, signal, current]: Parameters<ConversationCodingHost["open"]>) {
+  async open(...[projectId, runId, signal]: Parameters<ConversationCodingHost["open"]>) {
     if (this.runs.has(projectId) || this.changing.has(projectId)) throw new Error("当前会话已有任务或正在更换目录，请稍后重试");
     const controller = new AbortController();
     const combined = AbortSignal.any([signal, controller.signal]);
     this.runs.set(projectId, { runId, controller });
+    this.notices.delete(projectId);
     try {
       const directory = await this.store.read(projectId);
-      return { enabled: Boolean(directory), extension: codingExtension(this, { projectId, runId, directory, signal: combined, current }),
-        close: () => { controller.abort(); if (this.runs.get(projectId)?.runId === runId) this.runs.delete(projectId); } };
+      combined.throwIfAborted();
+      let selectedWorkspace: string | null = null;
+      const requestDirectory = async () => {
+        combined.throwIfAborted();
+        if (selectedWorkspace) return selectedWorkspace;
+        const selected = await this.dialog(projectId, runId, "", combined, "directory", "生成代码前请选择保存文件夹", { tool: "choose_code_directory" });
+        combined.throwIfAborted();
+        if (typeof selected !== "string") throw new Error("未选择代码文件夹，已取消本轮代码生成。");
+        selectedWorkspace = selected;
+        return selected;
+      };
+      // Non-coding sessions still need a real private cwd for plugin configuration and web artifacts.
+      const cwd = directory ?? join(this.protectedDirectory, "pi-workspaces", Buffer.from(projectId).toString("hex"));
+      await mkdir(cwd, { recursive: true });
+      const ask = (kind: "select" | "input" | "confirm", title: string, extra: Partial<ConversationApproval>, opts?: ExtensionUIDialogOptions) => this.dialog(projectId, runId, cwd, combined, kind, title, extra, opts);
+      return { enabled: Boolean(directory), cwd, workspaceSelected: () => selectedWorkspace !== null,
+        activeTool: (tool: { id: string; name: string; arguments: Record<string, unknown> } | null) => { if (tool) this.activeTools.set(projectId, tool); else this.activeTools.delete(projectId); }, extension: codingExtension(directory, requestDirectory),
+        additionalExtensionPaths: desktopPiPackages.filter(name => directory || !["pi-fff", "@gotgenes/pi-subagents"].includes(name)).map(piPackagePath),
+        prepare: (model: { provider: string; id: string }) => preparePiWorkspace(cwd, model),
+        createUI: (base: ExtensionUIContext): ExtensionUIContext => ({ ...base,
+          notify: (message, type) => { this.notices.set(projectId, [...(this.notices.get(projectId) ?? []), { id: randomUUID(), message, level: type ?? "info" }].slice(-10)); },
+          select: async (title, options, opts) => { const result = await ask("select", title, { options }, opts); return typeof result === "string" ? result : undefined; },
+          input: async (title, placeholder, opts) => { const result = await ask("input", title, { placeholder }, opts); return typeof result === "string" ? result : undefined; },
+          confirm: async (title, message, opts) => await ask("confirm", title, { detail: message }, opts) === true,
+          editor: async (title, prefill) => { const result = await ask("input", title, { initialValue: prefill, multiline: true }); return typeof result === "string" ? result : undefined; },
+        }),
+        close: () => { controller.abort(); this.activeTools.delete(projectId); if (this.runs.get(projectId)?.runId === runId) this.runs.delete(projectId); } };
     } catch (error) { controller.abort(); this.runs.delete(projectId); throw error; }
   }
   close() { for (const run of this.runs.values()) run.controller.abort(); this.runs.clear(); }

@@ -10,8 +10,6 @@ import {
   renderPngResponseSchema,
   renderPdfRequestSchema,
   renderPdfResponseSchema,
-  renderStructuredModelRequestSchema,
-  renderStructuredModelResponseSchema,
   renderSvgRequestSchema,
   renderSvgResponseSchema,
 } from "../../../../shared/contracts/index.js";
@@ -98,36 +96,6 @@ export function registerRenderRoutes({
           source: input.plantUmlSource,
         }),
       );
-    } catch (error) {
-      request.log.error(error);
-      reply.code(400);
-      return createHttpErrorResponse(reply, { ...(error instanceof ModelSemanticError ? { diagnostics: error.diagnostics } : {}) });
-    }
-  });
-
-  app.post("/api/render/model", async (request, reply) => {
-    const access = await requireRenderProjectAccess(request, reply);
-    if (!access.ok) return createHttpErrorResponse(reply);
-
-    const input = renderStructuredModelRequestSchema.parse(request.body);
-    try {
-      const diagnostics = validateModelInput(input.model, input.stage);
-      if (diagnostics.length) throw new ModelSemanticError(diagnostics);
-      const [artifact] = input.stage === "design"
-        ? generateDesignPlantUmlArtifacts([designDiagramModelSpecSchema.parse(input.model)])
-        : generatePlantUmlArtifacts([diagramModelSpecSchema.parse(input.model)]);
-      if (!artifact) {
-        reply.code(400);
-        return createHttpErrorResponse(reply);
-      }
-      const rendered = await renderClient({
-        diagramKind: artifact.diagramKind,
-        source: artifact.source,
-      });
-      return renderStructuredModelResponseSchema.parse({
-        plantUmlSource: artifact.source,
-        ...rendered,
-      });
     } catch (error) {
       request.log.error(error);
       reply.code(400);

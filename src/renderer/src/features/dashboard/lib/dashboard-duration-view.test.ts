@@ -28,7 +28,7 @@ describe('artifact duration view', () => {
   })
   it('shows requirements/design/documents with no samples and preserves subsecond precision', () => {
     const summary = dashboardFixture(0)
-    for (const family of ['requirements', 'design', 'document', 'feasibility']) {
+    for (const family of ['requirements', 'design', 'document']) {
       const view = buildDashboardDurationView(summary, t, { ...filter, family })
       expect(view.total).toBeGreaterThan(0)
       expect(view.items[0].name).toContain(`artifactTypes.${family}_`)

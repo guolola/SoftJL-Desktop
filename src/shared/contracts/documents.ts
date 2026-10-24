@@ -4,7 +4,6 @@ import { z } from "zod";
 export const documentKindSchema = z.enum([
   "requirementsSpec",
   "softwareDesignSpec",
-  "feasibilityStudy",
 ]);
 export type DocumentKind = z.infer<typeof documentKindSchema>;
 

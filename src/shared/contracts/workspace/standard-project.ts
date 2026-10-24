@@ -1,8 +1,9 @@
-// Shared contracts for the ordinary graduation-project workflow, independent of professional baselines.
+// Shares the project conversation, diagram, test and document contracts.
 import { z } from "zod";
 import { modelingAttachmentSchema } from "../modeling/modeling-attachments.js";
 import { modelTokenUsageSchema } from "../modeling/model-catalog.js";
 import { documentStyleSettingsSchema, type DocumentStyleSettings } from "../documents.js";
+import { standardConversationArtifactsSchema } from "./conversation-artifacts.js";
 
 import { functionStructureDiagramSpecSchema, useCaseDiagramSpecSchema, activityDiagramSpecSchema, architectureDiagramSpecSchema,
   classDiagramSpecSchema, sequenceDiagramSpecSchema, tableDiagramSpecSchema } from "../modeling/models.js";
@@ -99,6 +100,7 @@ export const standardConversationMessageSchema = z.object({
   status: z.enum(["streaming", "completed", "failed"]).default("completed"),
   attachments: z.array(standardAttachmentSchema).max(4).optional(), quote: standardQuoteSchema.optional(),
   reasoning: z.string().optional(),
+  artifacts: standardConversationArtifactsSchema.optional(),
   timing: z.object({
     streamStartTime: z.number().nonnegative(), firstTokenTime: z.number().nonnegative().optional(),
     totalStreamTime: z.number().nonnegative(), tokenCount: z.number().nonnegative().optional(),
@@ -108,6 +110,8 @@ export const standardConversationMessageSchema = z.object({
   feedback: z.enum(["positive", "negative"]).optional(),
   tools: z.array(z.object({ id: z.string(), name: z.string(), status: z.enum(["running", "completed", "failed"]),
     request: z.string().max(40000).optional(), output: z.string().max(20000).optional(), directory: z.string().optional(),
+    arguments: z.record(z.unknown()).optional(), data: z.record(z.unknown()).optional(),
+    artifacts: standardConversationArtifactsSchema.optional(),
     exitCode: z.number().int().optional(), durationMs: z.number().nonnegative().optional(), truncated: z.boolean().optional(),
   })).optional(),
 }).strict();
@@ -123,6 +127,8 @@ const standardRunSchema = z.object({
   requestId: z.string().optional(), continuedFrom: z.string().optional(),
   documentStyle: documentStyleSettingsSchema.optional(),
   resumeOperation: z.enum(["chat", "tests", "requirementsSpec", "softwareDesignSpec"]).optional(),
+  // All diagrams attempted during this run, including earlier calls that Pi may recover.
+  diagramIds: z.array(z.string()).optional(),
   work: z.object({ ids: z.array(z.string()), instruction: z.string().optional() }).optional(),
 });
 export type StandardProjectState = {

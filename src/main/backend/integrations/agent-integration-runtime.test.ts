@@ -1,9 +1,10 @@
-// Exercises actual MCP calls through Pi's direct, deferred and sandboxed tool paths.
+// Verifies basic MCP calls and actual Skill reads, including saved connection compatibility.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createAssistantMessageEventStream, getCurrentSystemPrompt, getCurrentTools, type AssistantMessage } from "@earendil-works/pi-ai";
 import { startMcpTestServer } from "../../../../tests/modeling/fixtures/integrations/mcp-test-server.js";
 import { compatibleTestModelCapability } from "../../../../tests/modeling/fixtures/providers/model-capability.js";
@@ -12,13 +13,18 @@ import { runStandardAgent } from "../../modeling/runs/pipelines/standard/standar
 import { IntegrationStore } from "./integration-store.js";
 import { createAgentIntegrationRuntime } from "./agent-integration-runtime.js";
 
-for (const exposure of ["direct", "deferred", "codemode"] as const) test(`native Pi executes ${exposure} MCP tools and loads selected Skills`, async t => {
+for (const [exposure, transport] of [["direct", "http"], ["direct", "stdio"], ["deferred", "http"], ["codemode", "http"]] as const) test(`native Pi executes ${transport} ${exposure} MCP tools and loads selected Skills`, async t => {
   const directory = await mkdtemp(join(tmpdir(), "softjl-mcp-runtime-")); t.after(() => rm(directory, { recursive: true, force: true }));
-  const peer = await startMcpTestServer(); t.after(peer.close);
+  const peer = transport === "http" ? await startMcpTestServer() : undefined;
+  if (peer) t.after(peer.close);
   const store = await IntegrationStore.open(directory, "test-key");
-  await store.saveServer("fixture", { name: "Fixture", description: "Modeling record tools", enabled: true, exposure, config: { type: "http", url: peer.url } });
+  await store.saveServer("fixture", { name: "Fixture", description: "Modeling record tools", enabled: true, exposure,
+    config: peer ? { type: "http", url: peer.url } : { type: "stdio", command: process.execPath, args: [fileURLToPath(new URL("../../../../tests/modeling/fixtures/integrations/mcp-stdio-server.mjs", import.meta.url))] } });
+  await store.saveSkill("local-workflow", { name: "local-workflow", description: "Read records using saved evidence", content: "# Record workflow\nUse actual MCP evidence.", enabled: true });
+  const reopened = await IntegrationStore.open(directory, "test-key");
   const checked = await store.testServer("fixture"); assert.equal(checked.ok, true, checked.message); assert.equal(checked.tools.length, 2);
-  const managed = await createAgentIntegrationRuntime(store)();
+  const managed = await createAgentIntegrationRuntime(reopened)();
+  const skillPath = join(managed.options.managedSkillPaths!.find(path => path.endsWith("local-workflow"))!, "SKILL.md");
   t.after(managed.close);
   let state = createStandardProjectState("测试项目");
   let round = 0;
@@ -26,7 +32,6 @@ for (const exposure of ["direct", "deferred", "codemode"] as const) test(`native
   const call = (name: string, args: Record<string, unknown>) => response([{ type: "toolCall", id: `native-${round}`, name, arguments: args }]);
   await runStandardAgent("p", { operation: "chat", message: "读取记录并解释", language: "zh-CN" }, state, {
     ...managed.options,
-    extensionFactories: [...managed.options.extensionFactories!, pi => { pi.on("session_start", async () => { await new Promise(resolve => setTimeout(resolve, 150)); }); }],
     settings: { apiBaseUrl: "https://example.test", apiKey: "test-only", model: "test", modelCapability: compatibleTestModelCapability("test") },
     signal: new AbortController().signal,
     save: async update => { update(state); return structuredClone(state); },
@@ -38,21 +43,31 @@ for (const exposure of ["direct", "deferred", "codemode"] as const) test(`native
       if (prompt.startsWith("Suggest exactly")) message = response([{ type: "text", text: "检查需求\n完善模型\n补充测试" }]);
       else {
         assert.match(prompt, /requirements-discovery/u);
+        assert.match(prompt, /local-workflow/u);
         const names = getCurrentTools(context.messages).map(tool => tool.name);
-        if (round++ === 0) {
+        if (exposure === "direct") {
+          assert.ok(!names.includes("codemode"));
+          assert.ok(!names.includes("tool_search"));
+        }
+        if (round++ === 0) message = call("read", { path: skillPath });
+        else if (round === 2) {
+          assert.ok(context.messages.some(item => item.role === "toolResult" && item.content.some(part => part.type === "text" && part.text.includes("Use actual MCP evidence."))));
           if (exposure === "direct") { assert.ok(names.includes("mcp__fixture__read_record")); message = call("mcp__fixture__read_record", { id: "r1" }); }
           else if (exposure === "deferred") { assert.ok(names.includes("tool_search")); message = call("tool_search", { query: "read modeling record", limit: 5 }); }
           else { assert.ok(names.includes("codemode")); message = call("codemode", { code: 'const r = await tools.mcp__fixture__read_record({id:"r1"}); text(r);' }); }
-        } else if (exposure === "deferred" && peer.calls.length === 0 && round < 4) message = call("mcp__fixture__read_record", { id: "r1" });
+        } else if (exposure === "deferred" && peer?.calls.length === 0 && round < 5) message = call("mcp__fixture__read_record", { id: "r1" });
         else {
-          assert.equal(peer.calls.length, 1, JSON.stringify(context.messages).slice(-2500));
+          if (peer) assert.equal(peer.calls.length, 1, JSON.stringify(context.messages).slice(-2500));
+          if (exposure !== "codemode") assert.ok(context.messages.some(item => item.role === "toolResult" && item.content.some(part => part.type === "text" && part.text.includes("actual MCP evidence"))));
           message = response([{ type: "text", text: "已读取实际记录。" }]);
         }
       }
       out.push({ type: "done", reason: message.stopReason as "toolUse" | "stop", message }); return out;
     },
   });
-  assert.equal(peer.calls.length, 1);
-  assert.deepEqual(peer.calls[0], { name: "read_record", arguments: { id: "r1" } });
+  if (peer) {
+    assert.equal(peer.calls.length, 1);
+    assert.deepEqual(peer.calls[0], { name: "read_record", arguments: { id: "r1" } });
+  }
   assert.ok(state.piSession);
 });

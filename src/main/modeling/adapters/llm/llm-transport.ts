@@ -54,7 +54,7 @@ export interface ResponseFormatFallbackEvent {
 }
 
 export interface StreamChatCompletionInput {
-  // Explicit output reservation used by engineering context admission checks.
+  // Explicit output reservation used by context admission checks.
   maxOutputTokens?: number;
   // Internal per-call attribution survives concurrent pipeline stage changes.
   runContext?: { stage?: import("../../../../shared/contracts/index.js").RunStage; diagramKind?: string; subtaskId?: string; subtaskLabel?: string; operation?: "structure_check" | "visual_check" | "model_repair" | "render_repair"; round?: number };

@@ -4,7 +4,10 @@ import test from "node:test";
 import { dashboardSummarySchema, type DashboardRun } from "../../../../shared/contracts/index.js";
 import { createInMemoryAuthStore } from "../../auth/in-memory-auth-store.js";
 import { buildDashboardSummary, dashboardRunFromRecord } from "./dashboard-summary.js";
-import { createEmptySnapshot } from "../../runs/records/snapshots.js";
+import { createEmptySnapshot as createSnapshot } from "../../runs/records/snapshots.js";
+function createEmptySnapshot(runId: string) {
+  return { ...createSnapshot(runId), standardRun: { operation: "chat", providerConfigId: "provider", model: "model-a", baseline: {}, artifacts: [] } };
+}
 
 const now = new Date("2026-10-05T00:30:00+08:00");
 function fixture() {
@@ -49,15 +52,15 @@ test("task successes alone do not mark an entire module complete without current
   const { user, sources } = fixture();
   for (const source of sources) source.documents = [];
   const id = sources[0].project.id;
-  const runs = [run(id, "completed", { runKind: "feasibility" }), run(id, "completed"),
+  const runs = [run(id, "completed", { runKind: "requirements" }), run(id, "completed"),
     run(id, "completed", { runId: "retry" }), run(id, "failed"),
     run(id, "running", { runKind: "design" }), run(id, "cancelled", { runKind: "document" }),
     run(id, "queued", { runKind: "design" }), run("unauthorized", "completed", { runKind: "design" })];
   const summary = dashboardSummarySchema.parse(buildDashboardSummary(user, sources, runs, now));
   assert.deepEqual(summary.projects.find(project => project.id === id)?.progress, {
-    completed: 0, total: 20, percentage: 0, stages: [
-      { kind: "feasibility", completed: 0, total: 3 }, { kind: "requirements", completed: 0, total: 7 },
-      { kind: "design", completed: 0, total: 7 }, { kind: "document", completed: 0, total: 3 },
+    completed: 0, total: 10, percentage: 0, stages: [
+      { kind: "requirements", completed: 0, total: 3 },
+      { kind: "design", completed: 0, total: 5 }, { kind: "document", completed: 0, total: 2 },
     ],
   });
   assert.equal(summary.projects.find(project => project.id === sources[1].project.id)?.progress?.percentage, 0);
@@ -67,13 +70,13 @@ test("existing documents complete the specification stage; deleted documents and
   sources[1].documents = [{ id: "deleted", status: "deleted", documentKind: "requirementsSpec" }];
   sources[2].project.status = "deleted";
   const summary = buildDashboardSummary(user, sources, [run(sources[2].project.id, "completed")], now);
-  assert.equal(summary.projects.find(project => project.id === sources[0].project.id)?.progress?.percentage, 5);
+  assert.equal(summary.projects.find(project => project.id === sources[0].project.id)?.progress?.percentage, 10);
   assert.equal(summary.projects.find(project => project.id === sources[1].project.id)?.progress?.percentage, 0);
   assert.ok(!summary.projects.some(project => project.id === sources[2].project.id));
 });
-test("Hong Kong month/day boundaries and Monday week include feasibility and zero buckets", () => {
+test("Hong Kong month/day boundaries and Monday week include conversations and zero buckets", () => {
   const { user, sources } = fixture(); const id = sources[0].project.id;
-  const summary = buildDashboardSummary(user, sources, [run(id, "completed", { runKind: "feasibility" }), run(id, "failed", { createdAt: "2026-09-30T16:00:00Z" })], now);
+  const summary = buildDashboardSummary(user, sources, [run(id, "completed", { runKind: "requirements" }), run(id, "failed", { createdAt: "2026-09-30T16:00:00Z" })], now);
   assert.equal(summary.monthly.at(-1)?.runs, 2);
   assert.equal(summary.daily.at(-1)?.key, "2026-10-05");
   assert.equal(summary.daily.at(-1)?.runs, 1);
@@ -84,11 +87,11 @@ test("Hong Kong month/day boundaries and Monday week include feasibility and zer
   assert.equal(summary.monthly[0].runs, 0);
   assert.equal(summary.monthly[0].successRate, null);
 });
-test("missing start timestamps are never replaced with queued time", () => {
+test("conversation duration starts at its durable accepted-command timestamp", () => {
   const snapshot = createEmptySnapshot("r", "req", []); snapshot.status = "completed";
   const base = { snapshot, listeners: new Set(), terminal: true, metadata: { projectId: "p", createdAt: "2026-10-01T00:00:00Z", completedAt: "2026-10-01T01:00:00Z" } };
-  assert.equal(dashboardRunFromRecord({ ...base, events: [] })?.startedAt, null);
-  assert.equal(dashboardRunFromRecord({ ...base, events: [{ type: "stage_started", stage: "generate_models", message: "start" }], eventCreatedAt: ["2026-10-01T00:30:00Z"] })?.startedAt, "2026-10-01T00:30:00.000Z");
+  assert.equal(dashboardRunFromRecord({ ...base, events: [] })?.startedAt, "2026-10-01T00:00:00.000Z");
+  assert.equal(dashboardRunFromRecord({ ...base, events: [{ type: "stage_started", stage: "generate_models", message: "start" }], eventCreatedAt: ["2026-10-01T00:30:00Z"] })?.startedAt, "2026-10-01T00:00:00.000Z");
 });
 test("concrete artifact averages are isolated by project and identity and exclude invalid samples", () => {
   const { user, sources } = fixture(); const id = sources[0].project.id;

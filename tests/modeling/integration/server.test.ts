@@ -1,146 +1,54 @@
-// Verifies API server behavior through the assembled server.
-
-import assert from "node:assert/strict";
+// Verifies the retained conversation boundary and removal of engineering HTTP workflows.
 import test from "node:test";
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve, sep } from "node:path";
+import { createApiServer } from "../../../src/main/modeling/index.js";
+import { createInMemoryAuthStore } from "../../../src/main/modeling/auth/in-memory-auth-store.js";
+import { createProviderConfigStore } from "../../../src/main/modeling/provider-configs/provider-config-store.js";
+import { createRunRecordStore } from "../../../src/main/modeling/runs/records/run-record-store.js";
+import { createFileDocumentLibrary } from "../../../src/main/modeling/documents/library/document-library.js";
+import { createInMemoryLlmScheduler } from "../../../src/main/modeling/adapters/llm/llm-scheduler.js";
 
-import { MANAGED_PROVIDER_SETTINGS, TEST_REQUIREMENT_BASELINE, USECASE_MODEL_JSON, assertApiErrorCode, createMockLlmTransport, createTestApiServer } from "../fixtures/api-run-fixtures.js";
-
-test("api rejects invalid start requests with 400", async () => {
-  const app = await createTestApiServer({
-    llmTransport: createMockLlmTransport(),
-    renderClient: async () => ({
-      svg: "<svg><text>ok</text></svg>",
-      renderMeta: {
-        engine: "plantuml",
-        generatedAt: new Date().toISOString(),
-        sourceLength: 120,
-        durationMs: 5,
-      },
-    }),
-  });
-
-  const response = await app.inject({
-    method: "POST",
-    url: "/api/runs",
-    payload: {
-      requirementText: "实验平台根据文本需求生成模型和 UML 图。",
-      selectedDiagrams: ["usecase"],
-      providerSettings: {
-        apiBaseUrl: "https://ai.comfly.org",
-        apiKey: "",
-        model: "gpt-5.5",
-      },
-    },
-  });
-
-  assert.equal(response.statusCode, 400);
-  assert.match(response.body, /providerSettings\.providerConfigId/i);
-
-  const designResponse = await app.inject({
-    method: "POST",
-    url: "/api/design-runs",
-    payload: {
-      requirementBaseline: TEST_REQUIREMENT_BASELINE,
-      requirementModels: JSON.parse(USECASE_MODEL_JSON).models,
-      requirementModelTraceability: [],
-      selectedDiagrams: ["sequence"],
-      providerSettings: MANAGED_PROVIDER_SETTINGS,
-    },
-  });
-
-  assert.equal(designResponse.statusCode, 400);
-  assert.match(designResponse.body, /requirementModelTraceability/i);
-
-  await app.close();
-});
-
-test("api reports empty JSON request bodies as 400 instead of 500", async () => {
-  const app = await createTestApiServer({
-    llmTransport: createMockLlmTransport(),
-  });
-
-  const response = await app.inject({
-    method: "DELETE",
-    url: "/api/projects/project-a/documents/document-a",
-    headers: {
-      "content-type": "application/json",
-    },
-  });
-
-  assert.equal(response.statusCode, 400);
-  assertApiErrorCode(response, "VALIDATION_FAILED");
-
-  await app.close();
-});
-
-test("api production startup requires DATABASE_URL unless stores are injected", async () => {
-  const originalDatabaseUrl = process.env.DATABASE_URL;
-  delete process.env.DATABASE_URL;
-
-  try {
-    await assert.rejects(
-      () =>
-        createTestApiServer({
-          nodeEnv: "production",
-        }),
-      /DATABASE_URL is required in production/,
-    );
-  } finally {
-    if (originalDatabaseUrl === undefined) {
-      delete process.env.DATABASE_URL;
-    } else {
-      process.env.DATABASE_URL = originalDatabaseUrl;
-    }
-  }
-});
-
-test("api applies the configured CORS origin allowlist", async () => {
-  const originalCorsOrigins = process.env.API_CORS_ORIGINS;
-  process.env.API_CORS_ORIGINS = "https://app.example.com,http://localhost:3000";
-
-  const app = await createTestApiServer({
-    llmTransport: createMockLlmTransport(),
-    renderClient: async () => ({
-      svg: "<svg />",
-      renderMeta: {
-        engine: "plantuml",
-        generatedAt: new Date().toISOString(),
-        sourceLength: 0,
-        durationMs: 1,
-      },
-    }),
-  });
-
-  try {
-    const allowed = await app.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { origin: "https://app.example.com" },
-    });
-    const blocked = await app.inject({
-      method: "GET",
-      url: "/api/health",
-      headers: { origin: "https://evil.example.com" },
-    });
-
-    assert.equal(allowed.statusCode, 200);
-    assert.equal(
-      allowed.headers["access-control-allow-origin"],
-      "https://app.example.com",
-    );
-    assert.match(
-      String(allowed.headers["access-control-expose-headers"] ?? ""),
-      /Content-Disposition/i,
-    );
-    assert.equal(allowed.headers["access-control-allow-credentials"], "true");
-    assert.equal(blocked.statusCode, 200);
-    assert.equal(blocked.headers["access-control-allow-origin"], undefined);
-  } finally {
-    await app.close();
-    if (originalCorsOrigins === undefined) {
-      delete process.env.API_CORS_ORIGINS;
-    } else {
-      process.env.API_CORS_ORIGINS = originalCorsOrigins;
-    }
-  }
+test("projects expose one conversation workflow and reject removed engineering APIs", async t => {
+  const root = await mkdtemp(join(tmpdir(), "softjl-conversation-only-"));
+  const authStore = createInMemoryAuthStore();
+  const owner = authStore.createUser({ username: "owner", displayName: "Owner", passwordHash: "test" })!;
+  const outsider = authStore.createUser({ username: "outsider", displayName: "Other", passwordHash: "test" })!;
+  const cookie = (userId: string) => `uml_session=${authStore.createSession({ userId, ipAddress: null, userAgent: "test" }).id}`;
+  const headers = { cookie: cookie(owner.id) };
+  const { project } = authStore.createProject({ ownerUserId: owner.id, name: "图书管理", description: null });
+  const providerConfigs = createProviderConfigStore({ secret: "test" });
+  const config = providerConfigs.create({ name: "Test", baseUrl: "https://example.test", apiKey: "test", defaultModel: "test", allowedModels: ["test"], createdBy: "test" });
+  const scheduler = createInMemoryLlmScheduler(); scheduler.run = async () => { throw new Error("test provider failure"); };
+  const runs = createRunRecordStore();
+  const app = await createApiServer({ nodeEnv: "test", authStore, providerConfigStore: providerConfigs, runRecordStore: runs,
+    documentLibrary: createFileDocumentLibrary(root), llmScheduler: scheduler,
+    llmTransport: { async *streamChatCompletion() { throw new Error("No external traffic"); } },
+    renderClient: async () => { throw new Error("No rendering"); }, pngRenderClient: async () => { throw new Error("No rendering"); } });
+  t.after(async () => { await app.close(); assert.ok(resolve(root).startsWith(resolve(tmpdir()) + sep)); await rm(root, { recursive: true, force: true }); });
+  const url = `/api/projects/${project.id}/standard`;
+  assert.equal((await app.inject({ url })).statusCode, 401);
+  assert.ok([403, 404].includes((await app.inject({ url, headers: { cookie: cookie(outsider.id) } })).statusCode));
+  assert.equal((await app.inject({ url, headers })).statusCode, 200);
+  const created = await app.inject({ method: "POST", url: "/api/projects", headers, payload: { name: "新项目" } });
+  assert.equal(created.statusCode, 201, created.body); assert.equal(Object.hasOwn(created.json().project, "projectMode"), false);
+  for (const projectMode of ["standard", "professional"]) assert.equal((await app.inject({ method: "POST", url: "/api/projects", headers, payload: { name: "旧请求", projectMode } })).statusCode, 400);
+  for (const [method, endpoint] of [
+    ["POST", "/api/runs"], ["POST", "/api/design-runs"], ["POST", "/api/document-runs"], ["POST", "/api/feasibility-runs"],
+    ["GET", `/api/projects/${project.id}/workspace`], ["PUT", `/api/projects/${project.id}/workspace`],
+    ["POST", `/api/projects/${project.id}/runs/old/retry`], ["POST", `/api/projects/${project.id}/runs/old/cancel`],
+    ["POST", `/api/projects/${project.id}/code`], ["POST", "/api/render/model"], ["POST", "/api/cases/library-seat/project"],
+  ] as const) assert.equal((await app.inject({ method, url: endpoint, headers, ...(method !== "GET" ? { payload: {} } : {}) })).statusCode, 404, endpoint);
+  const payload = { operation: "chat", requestId: "11111111-1111-4111-8111-111111111111", message: "梳理借阅需求", providerSettings: { providerConfigId: config.id, model: "test" } };
+  const started = await app.inject({ method: "POST", url, headers, payload });
+  assert.equal(started.statusCode, 202, started.body); assert.equal(started.json().state.conversation[0].text, payload.message);
+  assert.equal(started.json().state.piSession, undefined);
+  assert.equal((await app.inject({ method: "POST", url, headers, payload })).statusCode, 200);
+  for (let attempt = 0; attempt < 200 && ![...runs.values()][0]?.terminal; attempt++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(runs.size, 1); assert.equal([...runs.values()][0]?.snapshot.operationType, "quick_modeling");
+  assert.equal([...runs.values()][0]?.snapshot.status, "failed");
+  const history = await app.inject({ url: `/api/projects/${project.id}/runs`, headers });
+  assert.equal(history.statusCode, 200, history.body); assert.equal(history.json().runs[0].operationType, "quick_modeling");
 });

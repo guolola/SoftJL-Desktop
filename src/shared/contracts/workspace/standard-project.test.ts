@@ -5,6 +5,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { standardAnswerSchema, standardScopeChoiceSchema, standardDiagramKinds, standardDiagramSchema, standardModelSchemaForKind, validateStandardModel, standardModelSchema, standardProjectStateSchema, createStandardProjectState, standardConversationMessageSchema } from "./standard-project.js";
 
+test("run ownership retains all attempted diagrams independently of the latest continuation target", () => {
+  const state = { ...createStandardProjectState(), run: { id: "turn", operation: "chat", status: "running", startedAt: "now",
+    diagramIds: ["class", "activity_borrow"], work: { ids: ["class"] } } };
+  assert.deepEqual(standardProjectStateSchema.parse(state).run?.diagramIds, ["class", "activity_borrow"]);
+  assert.deepEqual(standardProjectStateSchema.parse(state).run?.work?.ids, ["class"]);
+});
+
 test("conversation timing uses only the current recorded timing contract", () => {
   const message = { id: "reply", role: "assistant", text: "完成", createdAt: "2026-10-23T01:00:00.000Z", status: "completed",
     timing: { streamStartTime: 100, totalStreamTime: 4290, totalChunks: 2, toolCallCount: 0 } };
@@ -15,6 +22,16 @@ test("conversation timing uses only the current recorded timing contract", () =>
     assert.equal(standardProjectStateSchema.safeParse({ ...createStandardProjectState(), conversation: [obsolete] }).success, false);
     assert.deepEqual(obsolete, before);
   }
+});
+
+test("typed file and image artifacts survive conversation and workspace persistence", () => {
+  const artifacts = [{ type: "file", url: "/api/projects/p/documents/doc/download", filename: "report.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    { type: "image", url: "data:image/png;base64,aGVsbG8=" }];
+  const message = { id: "reply", role: "assistant", text: "", createdAt: "now", status: "completed", tools: [{ id: "tool", name: "generate_document", status: "completed", artifacts }] };
+  assert.deepEqual(standardConversationMessageSchema.parse(message), message);
+  const state = standardProjectStateSchema.parse({ ...createStandardProjectState(), conversation: [message] });
+  assert.deepEqual(state.conversation![0]!.tools![0]!.artifacts, artifacts);
+  assert.equal(standardConversationMessageSchema.safeParse({ ...message, artifacts: [{ type: "file", url: "file:///C:/private.txt", filename: "private.txt", mimeType: "text/plain" }] }).success, false);
 });
 
 test("persisted runs reject the removed preparation workflow without converting it to chat", () => {

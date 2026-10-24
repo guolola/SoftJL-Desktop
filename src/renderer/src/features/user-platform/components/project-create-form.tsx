@@ -10,7 +10,6 @@ import { Input } from "../../../shared/ui/input.js";
 import { Field, FieldGroup, FieldLabel, FieldSet } from "../../../shared/ui/field.js";
 import { platformApi, type PlatformProject } from "../services/platform-api.js";
 import { randomProjectBackground } from "../lib/project-backgrounds.js";
-import { ProjectModeSelector } from "./project-mode-selector.js";
 import { queueProjectIntroduction } from "../../../shared/lib/project-introduction.js";
 import { ProjectWorkspaceField } from "./project-workspace-field.js";
 
@@ -20,7 +19,6 @@ export function ProjectCreateForm({ onNavigate }: { onNavigate: Navigate }) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [projectMode, setProjectMode] = useState<"standard" | "professional">("standard");
   // Assign a default once; users can change the background in project settings after creation.
   const [backgroundKey] = useState(() => randomProjectBackground().key);
   const [creating, setCreating] = useState(false);
@@ -54,7 +52,6 @@ export function ProjectCreateForm({ onNavigate }: { onNavigate: Navigate }) {
     setCreating(true);
     try {
       const response = createdProject.current ? { project: createdProject.current } : await platformApi.createProject({
-        projectMode,
         name: name.trim(),
         description: description.trim() || null,
         backgroundKey,
@@ -66,7 +63,7 @@ export function ProjectCreateForm({ onNavigate }: { onNavigate: Navigate }) {
         assignedSelection.current = workspace.selectionId;
       }
       setWorkspaceError("");
-      queueProjectIntroduction(response.project.id, response.project.projectMode);
+      queueProjectIntroduction(response.project.id);
       if (!mounted.current) return;
       floatingAlert.success(t("projects.createForm.created"));
       navigationTimer.current = window.setTimeout(() => {
@@ -102,7 +99,6 @@ export function ProjectCreateForm({ onNavigate }: { onNavigate: Navigate }) {
               className="min-h-24 w-full resize-y"
             />
           </Field>
-          <ProjectModeSelector value={projectMode} onChange={setProjectMode} disabled={creating || !!createdProject.current} />
           <ProjectWorkspaceField directory={workspace?.directory ?? null} choosing={choosingWorkspace} disabled={creating || !workspaceAvailable}
             reason={!workspaceAvailable ? t("projectWorkspace.desktopOnly") : undefined} error={workspaceError}
             onChoose={() => void chooseWorkspace()} onClear={() => { setWorkspace(null); setWorkspaceError(""); }} />

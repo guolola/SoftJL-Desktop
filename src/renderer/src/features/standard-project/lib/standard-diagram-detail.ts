@@ -1,4 +1,4 @@
-// Shares engineering detail projections; Chen entities remain a separate conceptual model.
+// Projects saved diagram details; Chen entities remain a separate conceptual model.
 import type { StandardModel } from "../../../../../shared/contracts/index.js";
 import { buildDiagramDetailModel, type DiagramDetailModel } from "../../../entities/diagram/lib/model-details.js";
 

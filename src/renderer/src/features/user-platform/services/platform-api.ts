@@ -6,7 +6,6 @@ import { authMfaChallengeResponseSchema, authSessionResponseSchema, projectInvit
 import type {
   AuthMfaChallengeResponse,
   AuthSessionResponse,
-  FeasibilityRunSnapshot,
   RunTokenConsumption,
   DocumentKind,
   OnboardingStateResponse,
@@ -44,7 +43,6 @@ export interface PlatformUser {
 }
 
 export interface PlatformProject {
-  projectMode: "standard" | "professional";
   id: string;
   name: string;
   description: string | null;
@@ -494,7 +492,6 @@ export const platformApi = {
     return requestJson<PlatformProjectListResponse>("/api/projects");
   },
   createProject(input: {
-    projectMode?: "standard" | "professional";
     name: string;
     description: string | null;
     retentionPolicy?: string;
@@ -505,16 +502,9 @@ export const platformApi = {
       body: JSON.stringify(input),
     });
   },
-  createCaseProject(caseId: string) {
-    return requestJson<{ project: PlatformProject }>(
-      `/api/cases/${encodeURIComponent(caseId)}/project`,
-      { method: "POST" },
-    );
-  },
   getProject(projectId: string) {
     return requestJson<{
       project: PlatformProject;
-      generationExecutionMode: "offline-demo" | "provider";
       membership?: PlatformProjectMember | null;
     }>(`/api/projects/${projectId}`);
   },
@@ -631,7 +621,7 @@ export const platformApi = {
     return requestJson<{
       projectId: string;
       run: PlatformRunSummary;
-      snapshot?: RunHistorySnapshot | FeasibilityRunSnapshot;
+      snapshot?: RunHistorySnapshot;
       events?: unknown[];
     }>(`/api/projects/${encodeURIComponent(projectId)}/runs/${encodeURIComponent(runId)}${options.includeEvents ? '?includeEvents=true' : ''}`, { signal: options.signal });
   },
@@ -643,21 +633,6 @@ export const platformApi = {
       message?: string;
     }>(
       `/api/projects/${projectId}/runs/${runId}/cancel`,
-      { method: "POST" },
-    );
-    invalidateProjectRunReads(projectId);
-    return response;
-  },
-  async retryProjectRun(projectId: string, runId: string) {
-    const response = await requestJson<{
-      run?: PlatformRunSummary;
-      runId?: string;
-      sourceRunId?: string;
-      action?: "retry" | "rerun" | string;
-      status?: string;
-      message?: string;
-    }>(
-      `/api/projects/${projectId}/runs/${runId}/retry`,
       { method: "POST" },
     );
     invalidateProjectRunReads(projectId);

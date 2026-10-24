@@ -15,7 +15,7 @@ export async function verifyConversationCoding(page, projectId, screenshots) {
   const serveState = route => route.fulfill({ json: snapshot });
   const serveCoding = route => route.fulfill({ json: status });
   const decide = async route => {
-    assert.deepEqual(route.request().postDataJSON(), { runId: "coding-smoke-run", allow: true });
+    assert.deepEqual(route.request().postDataJSON(), { runId: "coding-smoke-run", value: "Yes" });
     accepted++;
     const tool = snapshot.state.conversation.at(-1).tools[0];
     tool.status = "completed"; status.approvals = [];
@@ -28,23 +28,24 @@ export async function verifyConversationCoding(page, projectId, screenshots) {
   await page.route(stateUrl, serveState); await page.route(codingUrl, serveCoding); await page.route(`${codingUrl}/approvals/*`, decide);
   try {
     await page.goto(new URL(projectPath, page.url()).href);
-    await page.locator('[data-slot="generation-loader"]').waitFor();
-    assert.equal(await page.getByRole("button", { name: "更换代码目录" }).isDisabled(), true);
+    await page.getByRole("button", { name: "停止生成", exact: true }).waitFor();
+    assert.equal(await page.getByRole("button", { name: /代码目录/ }).count(), 0);
+    assert.equal(await page.getByText(directory, { exact: true }).count(), 0);
     snapshot.state.conversation.push({ id: "coding-edit", role: "assistant", text: "", createdAt: new Date().toISOString(), status: "completed",
-      tools: [{ id: "coding-edit-call", name: "project_edit", request: "limit.ts", status: "running" }] });
-    status.approvals = [{ id: "edit-review", runId: "coding-smoke-run", toolCallId: "coding-edit-call", tool: "project_edit", title: "修改项目文件", directory,
-      path: "limit.ts", detail: "修改借阅上限", warning: "当前缺少模型、测试用例和说明书，建议先补齐，也可继续编码。", changes: [{ oldText: "export const limit = 4;", newText: "export const limit = 5;" }] }];
+      tools: [{ id: "coding-edit-call", name: "edit", request: "limit.ts", status: "running" }] });
+    status.approvals = [{ id: "edit-review", runId: "coding-smoke-run", toolCallId: "coding-edit-call", tool: "edit", title: "修改项目文件", directory,
+      dialog: "select", options: ["Yes", "No"], detail: "修改借阅上限", arguments: { path: "limit.ts", edits: [{ oldText: "export const limit = 4;", newText: "export const limit = 5;" }] } }];
     await page.locator('[data-slot="code-diff"]').waitFor();
-    await page.locator('[data-slot="generation-loader"]').waitFor({ state: "hidden" });
+    assert.equal(await page.locator('[data-slot="generation-loader"]').count(), 0);
     assert.ok((await page.locator('[data-slot="code-diff"]').innerText()).includes("export const limit = 5;"));
     if (screenshots) await page.screenshot({ path: join(screenshots, "coding-approval.png"), animations: "disabled" });
-    await page.getByRole("button", { name: "仍然继续并允许本次操作" }).click();
-    await page.locator('[data-slot="approval-card"]').waitFor({ state: "hidden" });
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
+    await page.locator('[data-slot="option-list"]').waitFor({ state: "hidden" });
     snapshot.state.conversation.push({ id: "coding-test", role: "assistant", text: "", createdAt: new Date().toISOString(), status: "completed",
-      tools: [{ id: "coding-test-call", name: "project_command", request: "npm test", status: "running" }] });
-    status.approvals = [{ id: "command-review", runId: "coding-smoke-run", toolCallId: "coding-test-call", tool: "project_command", title: "运行命令或测试", directory,
-      detail: "npm test", warning: "命令以当前 Windows 用户权限运行，可能访问目录外资源。" }];
-    await page.getByRole("button", { name: "允许本次操作", exact: true }).click();
+      tools: [{ id: "coding-test-call", name: "powershell", request: "npm test", status: "running" }] });
+    status.approvals = [{ id: "command-review", runId: "coding-smoke-run", toolCallId: "coding-test-call", tool: "powershell", title: "运行命令或测试", directory,
+      dialog: "select", options: ["Yes", "No"], detail: "npm test", arguments: { command: "npm test" } }];
+    await page.getByRole("button", { name: "Yes", exact: true }).click();
     await page.locator('[data-slot="terminal-block"][data-state="done"]').waitFor();
     assert.equal(accepted, 2);
     assert.ok((await page.locator('[data-slot="terminal-block"]').innerText()).includes("退出码 0"));

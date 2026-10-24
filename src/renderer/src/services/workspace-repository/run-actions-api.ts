@@ -1,12 +1,7 @@
-// Wraps current run start, cancellation, and structured model rendering endpoints.
-import type { DesignDiagramModelSpec, DiagramModelSpec, RenderStructuredModelResponse } from "../../../../shared/contracts/index.js";
-
-
-import { postJson } from "../api-client/index.js";
+// Converts saved diagram sources for downloads in the conversation workspace.
 import { renderPngResponseSchema, renderPdfResponseSchema, type UmlDiagramKind } from "../../../../shared/contracts/index.js";
-import { projectHeaders, requireProjectScope, withProjectHeaders } from "./project-scope.js";
-import type { StartDesignRunInput, StartDocumentRunInput, StartRunInput } from "./start-inputs.js";
-
+import { postJson } from "../api-client/index.js";
+import { requireProjectScope, projectHeaders } from "./project-scope.js";
 export async function exportDiagramRequest(input: { diagramKind: UmlDiagramKind; plantUmlSource: string; format: "png" | "pdf" }, projectId: string | null, signal?: AbortSignal): Promise<Blob> {
   const scopedProjectId = requireProjectScope(projectId);
   const payload = await postJson<unknown>(`/api/render/${input.format}`, {
@@ -19,98 +14,4 @@ export async function exportDiagramRequest(input: { diagramKind: UmlDiagramKind;
     : new TextDecoder().decode(bytes.subarray(0, 5)) === "%PDF-";
   if (!valid) throw new Error("Invalid diagram download content");
   return new Blob([bytes], { type: input.format === "png" ? "image/png" : "application/pdf" });
-}
-
-export async function startRequirementRunRequest(
-  input: StartRunInput,
-  projectId: string | null,
-) {
-  const scopedProjectId = requireProjectScope(projectId);
-  return postJson<{ runId: string }>(
-    "/api/runs",
-    {
-      projectId: scopedProjectId,
-      ...(input.selectedDiagrams.length === 0 ? {
-        requirementText: input.requirementText,
-        attachments: input.attachments,
-      } : {}),
-      reasoning: input.reasoning,
-      selectedDiagrams: input.selectedDiagrams,
-      requestedDiagrams: input.requestedDiagrams,
-      dependencyDiagrams: input.dependencyDiagrams,
-      analysisTargetUseCaseIds: input.analysisTargetUseCaseIds ?? [],
-      providerSettings: input.providerSettings,
-    },
-    {
-      errorKey: "errors.operations.startRequirements",
-      headers: projectHeaders(scopedProjectId),
-    },
-  );
-}
-
-export async function cancelRequirementRunRequest(runId: string, projectId: string | null): Promise<void> {
-  const scopedProjectId = requireProjectScope(projectId);
-  await postJson<unknown>(
-    `/api/projects/${encodeURIComponent(scopedProjectId)}/runs/${encodeURIComponent(runId)}/cancel`,
-    {},
-    withProjectHeaders(scopedProjectId, { errorKey: "errors.operations.taskAction" }),
-  );
-}
-
-export async function startDesignRunRequest(
-  input: StartDesignRunInput,
-  projectId: string | null,
-) {
-  const scopedProjectId = requireProjectScope(projectId);
-  return postJson<{ runId: string }>(
-    "/api/design-runs",
-    {
-      projectId: scopedProjectId,
-      reasoning: input.reasoning,
-      selectedDiagrams: input.selectedDiagrams,
-      requestedDiagrams: input.requestedDiagrams,
-      providerSettings: input.providerSettings,
-    },
-    {
-      errorKey: "errors.operations.startDesign",
-      headers: projectHeaders(scopedProjectId),
-    },
-  );
-}
-
-export async function startDocumentRunRequest(
-  input: StartDocumentRunInput,
-  projectId: string | null,
-) {
-  const scopedProjectId = requireProjectScope(projectId);
-  return postJson<{ runId: string }>(
-    "/api/document-runs",
-    {
-      projectId: scopedProjectId,
-      reasoning: input.reasoning,
-      documentKind: input.documentKind,
-      providerSettings: input.providerSettings,
-      useAiText: input.useAiText,
-      documentStyle: input.documentStyle,
-    },
-    withProjectHeaders(scopedProjectId, {
-      errorKey: "errors.operations.startDocument",
-    }),
-  );
-}
-
-export async function renderStructuredModelRequest(
-  model: DiagramModelSpec | DesignDiagramModelSpec,
-  projectId: string | null,
-  stage: "feasibility" | "requirements" | "design",
-) {
-  const scopedProjectId = requireProjectScope(projectId);
-  return postJson<RenderStructuredModelResponse>(
-    "/api/render/model",
-    { model, stage },
-    {
-      errorKey: "errors.operations.redrawModel",
-      headers: projectHeaders(scopedProjectId),
-    },
-  );
 }

@@ -61,7 +61,7 @@ export function recordUnsupportedDiagramRequest(state: StandardProjectState, mod
 }
 
 export function assertStandardDiagramSubstitutionAllowed(state: StandardProjectState) {
-  if (state.unsupportedDiagramRequest) throw new Error("请求的模型不受支持；替代图必须先通过 ask_questions 询问组件确认，不能沿用旧范围、文字同意或推荐快捷操作直接生成");
+  if (state.unsupportedDiagramRequest) throw new Error("请求的模型不受支持；替代图必须先通过 ask_user_question 询问组件确认，不能沿用旧范围、文字同意或推荐快捷操作直接生成");
 }
 
 export function prepareStandardAlternativeQuestion(question: StandardQuestion, models: string[], language?: "zh-CN" | "en") {

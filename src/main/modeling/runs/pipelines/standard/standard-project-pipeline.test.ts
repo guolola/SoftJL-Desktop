@@ -9,7 +9,8 @@ import { createStandardProjectState, standardDiagramTasks, validateStandardModel
 import { runStandardProject } from "./standard-project-pipeline.js";
 import { buildStandardDiagram } from "../../../normalizers/standard/diagram-source.js";
 import type { LlmTransport } from "../../../adapters/llm/llm-transport.js";
-import { createInMemoryLlmScheduler, createScheduledLlmTransport } from "../../../adapters/llm/llm-scheduler.js";
+import { createScheduledLlmTransport } from "../../../adapters/llm/llm-scheduler.js";
+import { createApiExternalAdapters } from "../../../server/external-adapters.js";
 import { readStandardModelingResource } from "./standard-modeling-knowledge.js";
 
 const outline: StandardOutline = { title: "借阅系统", summary: "借阅和归还", roles: [{ id: "reader", name: "读者", description: "借阅图书" }],
@@ -47,17 +48,20 @@ function memory(initial = createStandardProjectState("借阅和归还图书")) {
   return { get: () => structuredClone(state), save: async (update: (state: StandardProjectState) => void) => { update(state); return structuredClone(state); } };
 }
 
-function setRunConcurrency(t: TestContext, value: string | undefined) {
-  const previous = process.env.UML_LLM_RUN_CONCURRENCY;
-  if (value === undefined) delete process.env.UML_LLM_RUN_CONCURRENCY;
-  else process.env.UML_LLM_RUN_CONCURRENCY = value;
-  t.after(() => {
-    if (previous === undefined) delete process.env.UML_LLM_RUN_CONCURRENCY;
-    else process.env.UML_LLM_RUN_CONCURRENCY = previous;
-  });
+function setLegacyConcurrency(t: TestContext, value: string | undefined) {
+  for (const scope of ["GLOBAL", "PROVIDER", "PROJECT", "USER", "RUN"]) {
+    const name = `UML_LLM_${scope}_CONCURRENCY`;
+    const previous = process.env[name];
+    if (value === undefined) delete process.env[name];
+    else process.env[name] = value;
+    t.after(() => {
+      if (previous === undefined) delete process.env[name];
+      else process.env[name] = previous;
+    });
+  }
 }
 
-test("durable memory and business answers reach generation, repair, retry, tests and both documents", async () => {
+test("durable memory and business answers reach each explicit attempt, tests and both documents", async () => {
   const [diagramReference, deliverables] = await Promise.all([
     "skills/uml-graduation-modeling/references/views.md", "skills/graduation-deliverables/SKILL.md",
   ].map(async path => (await readStandardModelingResource(path)).toString("utf8")));
@@ -74,7 +78,7 @@ test("durable memory and business answers reach generation, repair, retry, tests
     assert.deepEqual(data.memory, ["管理员不能删除借阅记录"]);
     assert.deepEqual(data.clarifications, [{ round: 1, question: "数据库？", answer: "PostgreSQL" }]);
     if (data.task) {
-      assert.ok(String(input.messages[0]!.content).includes(diagramReference), "generation, repair and retry all receive the maintained diagram guidance");
+      assert.ok(String(input.messages[0]!.content).includes(diagramReference), "each explicit generation attempt receives the maintained diagram guidance");
       if (invalidOnce) { invalidOnce = false; yield '{"nodes":[],"edges":[]}'; }
       else yield JSON.stringify(model(data.task.kind));
     } else if (String(input.messages[0]!.content).includes("生成测试用例")) {
@@ -87,12 +91,14 @@ test("durable memory and business answers reach generation, repair, retry, tests
   } };
   const deps = { settings, transport, render, save: store.save };
   await runStandardProject({ operation: "generate", targetIds: ["function"] }, store.get(), deps);
-  assert.equal(store.get().diagrams.function?.status, "completed");
+  assert.equal(store.get().diagrams.function?.status, "failed");
+  assert.equal(calls, 1, "content failures never start an internal second attempt");
   await runStandardProject({ operation: "retry", diagramId: "function" }, store.get(), deps);
+  assert.equal(store.get().diagrams.function?.status, "completed");
   for (const operation of ["tests", "requirementsSpec", "softwareDesignSpec"] as const) {
     await runStandardProject({ operation }, store.get(), deps);
   }
-  assert.equal(calls, 6);
+  assert.equal(calls, 5);
 });
 
 for (const reasoning of [true, false]) test(`ordinary document generation forwards reasoning=${reasoning}`, async () => {
@@ -109,14 +115,16 @@ for (const reasoning of [true, false]) test(`ordinary document generation forwar
   assert.ok(store.get().documents?.requirementsSpec?.markdown.includes("借阅系统需求"));
 });
 
-for (const [configured, expected] of [[undefined, 2], ["1", 1], ["5", 5], ["20", 10], ["0", 2], ["invalid", 2], ["1.5", 2]] as const)
-test(`all businesses generate complete diagrams using the shared run concurrency (${configured ?? "default"})`, async t => {
-  setRunConcurrency(t, configured);
+for (const configured of [undefined, "1"] as const)
+test(`desktop generates all diagrams in parallel with legacy concurrency=${configured ?? "unset"}`, { timeout: 5000 }, async t => {
+  setLegacyConcurrency(t, configured);
   const store = memory({ ...createStandardProjectState("借阅系统"), outline });
   const references = Object.fromEntries(await Promise.all(["usecase", "activity", "class", "sequence", "views", "data-modeling"]
     .map(async name => [name, (await readStandardModelingResource(`skills/uml-graduation-modeling/references/${name}.md`)).toString("utf8")])));
   const expectedReference: Record<StandardDiagramKind, string> = { function: "views", usecase: "usecase", activity: "activity", architecture: "views", er: "data-modeling", class: "class", sequence: "sequence", table: "data-modeling" };
   const calls: string[] = []; let active = 0; let peak = 0;
+  let release!: () => void;
+  const allStarted = new Promise<void>(resolve => { release = resolve; });
   const transport: LlmTransport = { async *streamChatCompletion(input) {
     const request = JSON.parse(String(input.messages[1]!.content));
     const system = String(input.messages[0]!.content);
@@ -124,13 +132,14 @@ test(`all businesses generate complete diagrams using the shared run concurrency
     assert.ok(system.includes(references[selected]!), "each provider request receives its relevant maintained semantic rules");
     for (const [name, content] of Object.entries(references)) if (name !== selected) assert.ok(!system.includes(content), "unrelated reference bodies stay out of context");
     calls.push(request.task.id); active++; peak = Math.max(peak, active);
-    await new Promise(resolve => setTimeout(resolve, 25)); active--;
+    if (calls.length === 10) release();
+    await allStarted; active--;
     assert.deepEqual(request.outline, outline);
     yield JSON.stringify(model(request.task.kind));
   } };
   await runStandardProject({ operation: "generate" }, store.get(), { settings, transport, render, save: store.save });
   assert.equal(calls.length, 10);
-  assert.equal(peak, expected);
+  assert.equal(peak, 10);
   assert.equal(Object.values(store.get().diagrams).filter(diagram => diagram.status === "completed").length, 10);
   assert.ok(store.get().diagrams.activity_return);
   assert.ok(store.get().diagrams.sequence_return);
@@ -140,25 +149,29 @@ test(`all businesses generate complete diagrams using the shared run concurrency
   assert.equal(store.get().documents, undefined);
 });
 
-test("global scheduling still limits real requests when quick-modeling concurrency is increased", async t => {
-  setRunConcurrency(t, "5");
+test("desktop adapter wiring does not throttle provider requests even with legacy limits set", { timeout: 5000 }, async t => {
+  setLegacyConcurrency(t, "1");
   const store = memory({ ...createStandardProjectState("借阅系统"), outline });
   let active = 0; let peak = 0; let calls = 0;
+  let release!: () => void;
+  const allStarted = new Promise<void>(resolve => { release = resolve; });
+  const adapters = createApiExternalAdapters({ llmTransport: { async *streamChatCompletion(input) {
+    active++; calls++; peak = Math.max(peak, active);
+    try {
+      if (calls === 10) release();
+      await allStarted;
+      const { task } = JSON.parse(String(input.messages[1]!.content));
+      yield JSON.stringify(model(task.kind));
+    } finally { active--; }
+  } } });
   const transport = createScheduledLlmTransport({
-    scheduler: createInMemoryLlmScheduler({ globalConcurrency: 1, providerConcurrency: 5, projectConcurrency: 5, userConcurrency: 5, runConcurrency: 5 }),
+    scheduler: adapters.llmScheduler, transport: adapters.llmTransport,
     context: { runId: "quick", projectId: "project", userId: "user", providerConfigId: "provider", model: settings.model, taskType: "quick_modeling" },
-    transport: { async *streamChatCompletion(input) {
-      active++; calls++; peak = Math.max(peak, active);
-      try {
-        await new Promise(resolve => setTimeout(resolve, 5));
-        const { task } = JSON.parse(String(input.messages[1]!.content));
-        yield JSON.stringify(model(task.kind));
-      } finally { active--; }
-    } },
   });
   await runStandardProject({ operation: "generate" }, store.get(), { settings, transport, render, save: store.save });
   assert.equal(calls, 10);
-  assert.equal(peak, 1);
+  assert.equal(peak, 10);
+  assert.deepEqual(adapters.llmScheduler.snapshot(), { running: 0, queued: 0 });
   assert.equal(Object.values(store.get().diagrams).filter(diagram => diagram.status === "completed").length, 10);
 });
 
@@ -182,7 +195,7 @@ test("generation enforces confirmed kinds and uses a narrowed schema while prese
   await assert.rejects(runStandardProject({ operation: "generate" }, waiting, { settings, transport, render, save: store.save }), /先选择/);
 });
 
-test("generation rejects obsolete null fields before protocol normalization and repairs only to the current contract", async () => {
+test("obsolete null fields fail once and an explicit new attempt still uses the current contract", async () => {
   const store = memory({ ...createStandardProjectState(), outline });
   let calls = 0;
   const current = model("class");
@@ -191,12 +204,15 @@ test("generation rejects obsolete null fields before protocol normalization and 
     yield JSON.stringify(calls === 1 ? { ...current, edges: null } : { ...current, classes: [{ ...current.classes[0], isAbstract: null }, current.classes[1]] });
   } };
   await runStandardProject({ operation: "generate", targetIds: ["class"] }, store.get(), { settings, transport, render, save: store.save });
+  assert.equal(calls, 1);
+  assert.equal(store.get().diagrams.class.status, "failed");
+  await runStandardProject({ operation: "retry", diagramId: "class" }, store.get(), { settings, transport, render, save: store.save });
   assert.equal(calls, 2);
   assert.equal(store.get().diagrams.class.status, "completed");
   assert.deepEqual(store.get().diagrams.class.model, current);
 });
 
-test("structural repair is bounded and failure preserves sibling diagrams; retry targets only one", async () => {
+test("structural failure is returned after one attempt and preserves siblings; explicit retry targets only one", async () => {
   const store = memory({ ...createStandardProjectState("系统"), outline });
   const calls: string[] = [];
   const transport: LlmTransport = { async *streamChatCompletion(input) {
@@ -204,13 +220,49 @@ test("structural repair is bounded and failure preserves sibling diagrams; retry
     yield task.kind === "er" ? JSON.stringify({ nodes: [], edges: [] }) : JSON.stringify(model(task.kind));
   } };
   await runStandardProject({ operation: "generate" }, store.get(), { settings, transport, render, save: store.save });
-  assert.equal(calls.filter(id => id === "er").length, 2);
+  assert.equal(calls.filter(id => id === "er").length, 1);
   assert.equal(store.get().diagrams.er?.status, "failed");
   const before = store.get().diagrams;
   calls.length = 0;
   await runStandardProject({ operation: "retry", diagramId: "class" }, store.get(), { settings, transport, render, save: store.save });
   assert.deepEqual(calls, ["class"]);
   assert.deepEqual(store.get().diagrams.function, before.function);
+});
+
+for (const failure of ["json", "structure", "render"] as const) test(`a ${failure} failure returns one attempt to Pi without internal repair`, async () => {
+  const store = memory({ ...createStandardProjectState("系统"), outline });
+  const candidate = model("class");
+  if (failure === "structure") candidate.relationships[0]!.sourceId = "missing_class";
+  let calls = 0; let renders = 0;
+  const attempts = await runStandardProject({ operation: "generate", targetIds: ["class"] }, store.get(), {
+    settings, save: store.save,
+    transport: { async *streamChatCompletion() { calls++; yield failure === "json" ? "{invalid" : JSON.stringify(candidate); } },
+    render: async () => { renders++; throw new Error("render unavailable"); },
+  });
+  assert.equal(calls, 1);
+  assert.equal(renders, failure === "render" ? 1 : 0);
+  assert.equal(attempts?.[0]?.status, "failed");
+  assert.ok(attempts?.[0] && "error" in attempts[0] && attempts[0].error);
+  if (failure === "structure") assert.deepEqual(attempts?.[0] && "candidateModel" in attempts[0] ? attempts[0].candidateModel : undefined, candidate);
+  assert.equal(store.get().diagrams.class?.model, undefined, "invalid candidates cannot enter saved model data");
+});
+
+test("whole-turn ownership survives later attempts and a switch to document work", async () => {
+  const store = memory({ ...createStandardProjectState("系统"), outline,
+    run: { id: "turn", operation: "chat", status: "running", startedAt: "now" } });
+  const deps = { settings, save: store.save, render,
+    transport: { async *streamChatCompletion(input: Parameters<LlmTransport["streamChatCompletion"]>[0]) {
+      const request = JSON.parse(String(input.messages[1]!.content));
+      yield request.task?.kind === "er" ? "{invalid" : request.task ? JSON.stringify(model(request.task.kind)) : JSON.stringify({ markdown: "# 需求\n系统需求" });
+    } } };
+  await runStandardProject({ operation: "generate", targetIds: ["er", "class"] }, store.get(), deps);
+  await runStandardProject({ operation: "retry", diagramId: "class" }, store.get(), deps);
+  assert.deepEqual(store.get().run?.work?.ids, ["class"]);
+  assert.deepEqual(store.get().run?.diagramIds, ["er", "class"]);
+  await runStandardProject({ operation: "requirementsSpec" }, store.get(), deps);
+  assert.equal(store.get().run?.work, undefined);
+  assert.deepEqual(store.get().run?.diagramIds, ["er", "class"]);
+  assert.equal(store.get().diagrams.er?.status, "failed");
 });
 
 test("continuation generates only unfinished tasks and preserves completed diagrams and revision intent", async () => {

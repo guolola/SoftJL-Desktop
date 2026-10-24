@@ -10,7 +10,6 @@ export function stripDocumentHeadingNumber(title: string) {
 
 export function numberDocumentSections(
   sections: DocumentSection[],
-  options: { prefix?: string } = {},
 ) {
   let heading1 = 0;
   let heading2 = 0;
@@ -31,7 +30,7 @@ export function numberDocumentSections(
       heading1 += 1;
       heading2 = 0;
       heading3 = 0;
-      return { ...section, title: `${options.prefix ?? ""}${heading1} ${cleanTitle}` };
+      return { ...section, title: `${heading1} ${cleanTitle}` };
     }
 
     if (section.level === 2) {
@@ -40,7 +39,7 @@ export function numberDocumentSections(
       }
       heading2 += 1;
       heading3 = 0;
-      return { ...section, title: `${options.prefix ?? ""}${heading1}.${heading2} ${cleanTitle}` };
+      return { ...section, title: `${heading1}.${heading2} ${cleanTitle}` };
     }
 
     if (heading1 === 0) {
@@ -50,6 +49,6 @@ export function numberDocumentSections(
       heading2 = 1;
     }
     heading3 += 1;
-    return { ...section, title: `${options.prefix ?? ""}${heading1}.${heading2}.${heading3} ${cleanTitle}` };
+    return { ...section, title: `${heading1}.${heading2}.${heading3} ${cleanTitle}` };
   });
 }

@@ -78,5 +78,5 @@ export function standardGenerationScopeDescription(state: StandardProjectState) 
     ? state.generationScope.kinds.length
       ? `用户已确认的生成范围：${state.generationScope.kinds.map(kind => standardDiagramLabels[kind]).join("、")}。这是本轮授权；新增类型不会重生成其他已有图。generate_diagrams 省略 ids 只会生成这些类型；不得自行扩大范围。`
       : "用户本轮未选择任何模型或已拒绝生成，不得调用图表生成或修改工具。"
-    : state.generationScope?.status === "awaiting_selection" ? "尚未确认生成范围。可以解释模型用途、补充关键业务问题，但不得生成图表；请用户通过名称、序号、按推荐方案或生成全部选择。" : "已有项目按用户本轮明确请求修改，保留其他产物。";
+    : state.generationScope?.status === "awaiting_selection" ? "尚未确认生成范围。可以解释模型用途、补充关键业务问题，但不得生成图表；仅在用户目标仍不明确时使用 ask_user_question；明确的请求可直接执行。" : "已有项目按用户本轮明确请求修改，保留其他产物。";
 }

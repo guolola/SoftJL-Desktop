@@ -25,14 +25,6 @@ export function aggregateRunTokenConsumption(entries: LlmRequestTelemetry[]): Ru
   return consumption;
 }
 
-function snapshotConsumption(record: RunRecord): RunTokenConsumption | undefined {
-  if (!("tokenUsage" in record.snapshot) || !record.snapshot.tokenUsage) return undefined;
-  const cumulative = record.snapshot.tokenUsage.cumulative;
-  if (!reportedCount(cumulative.calls) || !reportedCount(cumulative.unreportedCalls)) return undefined;
-  return { ...emptyConsumption(), totalTokens: cumulative.calls > 0 && reportedCount(cumulative.total) ? cumulative.total : null,
-    calls: cumulative.calls + cumulative.unreportedCalls, unreportedCalls: cumulative.unreportedCalls };
-}
-
 export async function loadProjectRunTokenConsumption(input: {
   projectId: string; records: RunRecord[]; analyticsStore?: Partial<Pick<RunTelemetryStore, "listTelemetry">>;
 }): Promise<Map<string, RunTokenConsumption>> {
@@ -52,7 +44,7 @@ export async function loadProjectRunTokenConsumption(input: {
   }
   for (const record of records) {
     const group = byRun.get(record.snapshot.runId);
-    const consumption = group?.length ? aggregateRunTokenConsumption(group) : snapshotConsumption(record);
+    const consumption = group?.length ? aggregateRunTokenConsumption(group) : undefined;
     if (consumption) result.set(record.snapshot.runId, consumption);
   }
   return result;

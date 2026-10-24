@@ -1,9 +1,10 @@
 // Persists ordinary workflow transitions using the existing workspace optimistic concurrency contract.
-import { createStandardProjectState, storedStandardProjectStateSchema, type StandardProjectState } from "../../../../shared/contracts/index.js";
+import { assertCurrentWorkspaceState, createStandardProjectState, storedStandardProjectStateSchema, type StandardProjectState } from "../../../../shared/contracts/index.js";
 import type { AuthStore } from "../../auth/in-memory-auth-store.js";
 import { interruptStandardRunMessages } from "./standard-run-messages.js";
 
 export function readStandardState(state: Record<string, unknown>, description = ""): StandardProjectState {
+  assertCurrentWorkspaceState(state);
   if (!Object.hasOwn(state, "standardProject")) return createStandardProjectState(description);
   return structuredClone(storedStandardProjectStateSchema.parse(state.standardProject));
 }

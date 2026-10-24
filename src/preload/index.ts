@@ -5,7 +5,7 @@ contextBridge.exposeInMainWorld(
   Object.freeze({
     chooseProjectWorkspace: () => ipcRenderer.invoke("desktop:workspace:choose"),
     assignProjectWorkspace: (projectId: string, selectionId: string) => ipcRenderer.invoke("desktop:workspace:assign", projectId, selectionId),
-    chooseConversationDirectory: (projectId: string) => ipcRenderer.invoke("desktop:conversation:select-directory", projectId),
+    chooseConversationDirectory: (projectId: string, request?: import("../shared/contracts/workspace/conversation-coding.js").ConversationDirectoryRequest) => ipcRenderer.invoke("desktop:conversation:select-directory", projectId, request),
     showApplicationMenu: (locale: "zh-CN" | "en") =>
       ipcRenderer.invoke("desktop:window:menu", locale),
     setWindowColors: (colors: { color: string; symbolColor: string }) =>

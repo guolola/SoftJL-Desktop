@@ -1,10 +1,15 @@
-// Lets a trusted desktop host add scoped coding tools to the existing Pi turn; hosted APIs have no filesystem capability.
-import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { StandardProjectState } from "../../../../shared/contracts/index.js";
+// Lets the desktop host load Pi packages and bridge native dialogs into an existing modeling turn.
+import type { ExtensionFactory, ExtensionUIContext } from "@earendil-works/pi-coding-agent";
 
 export interface ConversationCodingHost {
-  open(projectId: string, runId: string, signal: AbortSignal, current: () => StandardProjectState): Promise<{
+  open(projectId: string, runId: string, signal: AbortSignal): Promise<{
     enabled: boolean;
+    cwd?: string;
+    additionalExtensionPaths?: string[];
+    prepare?: (model: { provider: string; id: string }) => Promise<void>;
+    createUI?: (base: ExtensionUIContext) => ExtensionUIContext;
+    activeTool?: (tool: { id: string; name: string; arguments: Record<string, unknown> } | null) => void;
+    workspaceSelected?: () => boolean;
     extension: ExtensionFactory;
     close: () => void;
   }>;

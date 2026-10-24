@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRunRecordStore, emitEvent } from "./run-record-store.js";
-import {  createEmptySnapshot } from "./snapshots.js";
+import { createEmptySnapshot as createSnapshot } from "./snapshots.js";
+function createEmptySnapshot(runId: string) { return createSnapshot(runId); }
 import { summarizeRunRecord } from "./run-record-summaries.js";
 
 test("llm chunk events notify live listeners without entering run history by default", () => {
@@ -192,16 +193,16 @@ test("run summaries use terminal metadata timestamps for completedAt", () => {
   assert.equal(summary.startedAt, "2026-06-18T13:49:59.000Z");
   assert.equal(summary.completedAt, "2026-06-18T14:48:23.000Z");
   assert.equal(summary.updatedAt, "2026-06-18T14:48:23.000Z");
-  assert.equal(summary.operationType, "requirement_modeling");
+  assert.equal(summary.operationType, "quick_modeling");
 });
 
-test("history operation remains stable after extraction and visual verification", () => {
+test("history operation remains stable across conversation progress", () => {
   for (const selectedDiagrams of [[], ["usecase"]] as const) {
     const snapshot = createEmptySnapshot("history-operation", "项目需求", [...selectedDiagrams]);
     const record = { snapshot, events: [], listeners: new Set<() => void>(), terminal: true };
     snapshot.status = "failed";
     snapshot.currentStage = "extract_rules";
-    const expected = selectedDiagrams.length ? "requirement_modeling" : "requirement_extraction";
+    const expected = selectedDiagrams.length ? "quick_modeling" : "quick_modeling";
     assert.equal(summarizeRunRecord(record).operationType, expected);
     snapshot.currentStage = "verify_diagram_visual";
     assert.equal(summarizeRunRecord(record).operationType, expected);

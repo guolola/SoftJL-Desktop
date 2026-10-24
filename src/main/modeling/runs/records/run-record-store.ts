@@ -2,10 +2,10 @@
 import { randomUUID } from "node:crypto";
 import { acceptOutputEvent } from "./run-output-provenance.js";
 import { runEventMetadataSchema } from "../../../../shared/contracts/index.js";
-import type { DashboardRun, DesignRunSnapshot, DocumentRunSnapshot, FeasibilityRunSnapshot, RunEvent, RunEventInput, RunSnapshot } from "../../../../shared/contracts/index.js";
+import type { DashboardRun, RunEvent, RunEventInput, RunSnapshot } from "../../../../shared/contracts/index.js";
 
 export interface RunRecord {
-  snapshot: RunSnapshot | DesignRunSnapshot | DocumentRunSnapshot | FeasibilityRunSnapshot;
+  snapshot: RunSnapshot;
   events: RunEvent[];
   /** Persisted totals survive filtered replay and keep new event sequences monotonic. */
   eventSequence?: number;
@@ -57,12 +57,8 @@ export async function refreshRunRecordIfAvailable(
 }
 
 export interface RunRecordMetadata {
-  /** Server-assigned fixture; persisted so retries remain offline. */
-  offlineDemoFixture?: "library-seat";
   userId?: string;
   projectId?: string;
-  /** Canonical system name from the project, kept identical across every generated model. */
-  systemName?: string;
   model?: string;
   createdAt: string;
   completedAt?: string;

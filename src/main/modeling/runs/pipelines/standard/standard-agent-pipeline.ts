@@ -1,4 +1,7 @@
 // Embeds the actual Pi SDK for a persistent project conversation, tool loop, memory and context compaction.
+import { boundedToolData } from "./standard-tool-presentation.js";
+import { standardToolArtifacts } from "./standard-tool-artifacts.js";
+import { bindPiHostProvider } from "../../../adapters/llm/pi-host-stream.js";
 import { randomUUID } from "node:crypto";
 import { ModelRuntime, createAgentSession, SettingsManager } from "@earendil-works/pi-coding-agent";
 import { InMemoryCredentialStore, InMemoryModelsStore } from "@earendil-works/pi-ai";
@@ -7,7 +10,7 @@ import type { StandardProjectState, ModelCapacity } from "../../../../../shared/
 import { restoreStandardSession } from "../../records/standard-agent-session.js";
 import { standardPiModel } from "../../../adapters/llm/pi-provider.js";
 import { type StandardCommand, type StandardPipelineDependencies } from "./standard-project-pipeline.js";
-import { createStandardManagedSummaryExtension, createStandardModelingExtension } from "./standard-agent-extensions.js";
+import { createStandardModelingExtension } from "./standard-agent-extensions.js";
 import { loadStandardAgentResources, type StandardAgentExtensionOptions } from "./standard-agent-resources.js";
 import { standardTokenUsage } from "../../records/standard-token-usage.js";
 import { prepareStandardAgentTurn, standardUserMessageId } from "./standard-agent-turn.js";
@@ -16,8 +19,13 @@ import { resolveStandardGenerationSelection } from "./standard-generation-scope.
 import { appendStandardGenerationResult } from "../../records/standard-run-messages.js";
 import type { ConversationCodingHost } from "../../../adapters/coding/conversation-coding-host.js";
 
-export async function runStandardAgent(projectId: string, command: StandardCommand, initial: StandardProjectState,
-  deps: StandardPipelineDependencies & StandardAgentExtensionOptions & { stream: StreamFn; signal: AbortSignal; capacity?: ModelCapacity; codingHost?: ConversationCodingHost }) {
+type StandardAgentDependencies = StandardPipelineDependencies & StandardAgentExtensionOptions & { stream: StreamFn; signal: AbortSignal; capacity?: ModelCapacity; codingHost?: ConversationCodingHost };
+
+export async function runStandardAgent(projectId: string, command: StandardCommand, initial: StandardProjectState, deps: StandardAgentDependencies) {
+  await runStandardAgentTurn(projectId, command, initial, deps, false);
+}
+
+async function runStandardAgentTurn(projectId: string, command: StandardCommand, initial: StandardProjectState, deps: StandardAgentDependencies, resumeWithWorkspace: boolean) {
   let current = initial;
   const save: StandardPipelineDependencies["save"] = async update => { current = await deps.save(update); return current; };
   const userMessageId = standardUserMessageId(command, current);
@@ -31,36 +39,31 @@ export async function runStandardAgent(projectId: string, command: StandardComma
     // Scope describes this request, not every model ever generated; existing outputs are retained separately.
     state.generationScope = { status: "confirmed", kinds: selection };
   });
-  // Scope consent is host-enforced, while the Agent owns the questions and invokes
-  // ask_questions to render the actual interactive inquiry.
-  if (!current.generationScope && !Object.keys(current.diagrams).length) {
-    await save(state => {
-      state.generationScope = { status: "awaiting_selection", kinds: ["function", "usecase", "activity"] };
-    });
-  }
-  const manager = restoreStandardSession(projectId, current.piSession);
+  const coding = await deps.codingHost?.open(projectId, current.run?.id ?? userMessageId, deps.signal);
+  let continueWithWorkspace = false;
+  try {
+  const manager = restoreStandardSession(projectId, current.piSession, coding?.cwd);
   const model = standardPiModel(deps.settings, deps.capacity);
+  await coding?.prepare?.(model);
   // Keep the installed SDK's credentials and model catalog isolated from host configuration.
   const modelRuntime = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsStore: new InMemoryModelsStore(), modelsPath: null, allowModelNetwork: false });
-  modelRuntime.registerProvider(model.provider, { api: "openai-completions", baseUrl: model.baseUrl, apiKey: deps.settings.apiKey, models: [model] });
+  const provider = bindPiHostProvider(deps.stream, model);
+  try {
+  modelRuntime.registerProvider(model.provider, { api: provider.api, baseUrl: model.baseUrl, apiKey: deps.settings.apiKey, models: [{ ...model, api: provider.api }], streamSimple: provider.streamSimple });
   await modelRuntime.setRuntimeApiKey(model.provider, deps.settings.apiKey);
   const settings = SettingsManager.inMemory({ compaction: { enabled: true, reserveTokens: Math.min(10000, Math.floor(model.contextWindow / 3)), keepRecentTokens: Math.min(12000, Math.floor(model.contextWindow / 4)) }, retry: { enabled: false }, enableSkillCommands: false });
-  const prompt = "你是本项目的快速建模助手。遵守随会话加载的专用 AGENTS.md；专业方法使用所列技能，当前项目事实由本轮上下文提供。";
+  const prompt = `你是本项目的快速建模助手。遵守随会话加载的专用 AGENTS.md；专业方法使用所列技能，当前项目事实由本轮上下文提供。子代理必须显式指定 model=${JSON.stringify(`${model.provider}/${model.id}`)}，沿用用户当前配置的模型服务。`;
   let calls = 0; let writes = Promise.resolve(); let writeFailure: unknown; let assistantId = ""; let partial = ""; let reasoning = ""; let lastSave = 0; let messageStartedAt = 0;
   const beforeToolCall = async () => {
     await writes; deps.signal.throwIfAborted(); if (writeFailure) throw writeFailure;
   };
-  let coding: Awaited<ReturnType<ConversationCodingHost["open"]>> | undefined;
-  try {
-  coding = await deps.codingHost?.open(projectId, current.run?.id ?? userMessageId, deps.signal, () => current);
   const loader = await loadStandardAgentResources(manager.getCwd(), settings, prompt, {
-    additionalExtensionPaths: deps.additionalExtensionPaths,
+    additionalExtensionPaths: [...(coding?.additionalExtensionPaths ?? []), ...(deps.additionalExtensionPaths ?? [])],
     managedSkillPaths: deps.managedSkillPaths,
     skillResourceRoots: deps.skillResourceRoots,
     integrationContext: deps.integrationContext,
     extensionFactories: [
       createStandardModelingExtension({ ...deps, save }, () => current, command, beforeToolCall, deps.skillResourceRoots, coding?.enabled),
-      createStandardManagedSummaryExtension({ ...deps, save }, () => current),
       ...(coding ? [coding.extension] : []),
       ...(deps.extensionFactories ?? []),
     ],
@@ -85,9 +88,17 @@ export async function runStandardAgent(projectId: string, command: StandardComma
     return deps.stream(...args);
   };
   session.agent.toolExecution = "sequential";
+  const finishTurn = session.agent.finishTurn;
+  session.agent.finishTurn = async (...args) => {
+    const decision = await finishTurn?.(...args);
+    // Settle after the chooser's tool result so no request runs with the previous directory's tools.
+    return coding?.workspaceSelected?.() ? { action: "end" } : decision ?? undefined;
+  };
   const abort = () => { session.agent.abort(); session.abortCompaction(); };
   deps.signal.addEventListener("abort", abort, { once: true });
   const unsubscribe = session.subscribe(event => {
+    if (event.type === "tool_execution_start") coding?.activeTool?.({ id: event.toolCallId, name: event.toolName, arguments: boundedToolData(event.args) ?? {} });
+    if (event.type === "tool_execution_end") coding?.activeTool?.(null);
     if (event.type === "message_start" && event.message.role === "assistant") { assistantId = randomUUID(); partial = ""; reasoning = ""; lastSave = 0; messageStartedAt = Date.now(); firstTokenAt = undefined; totalChunks = 0; }
     if (event.type === "message_update") {
       const delta = event.assistantMessageEvent;
@@ -110,7 +121,7 @@ export async function runStandardAgent(projectId: string, command: StandardComma
         const text = response.content.filter(item => item.type === "text").map(item => item.text).join(""); const id = assistantId;
         const thought = response.content.filter(item => item.type === "thinking").map(item => item.thinking).join("");
         const toolCalls = response.content.filter(item => item.type === "toolCall").map(item => ({ id: item.id, name: item.name, status: "running" as const,
-          ...(item.name.startsWith("project_") ? { request: String(item.arguments.command ?? item.arguments.path ?? ".").slice(0, 40000) } : {}) }));
+          arguments: boundedToolData(item.arguments), request: String(item.arguments.command ?? item.arguments.query ?? item.arguments.prompt ?? item.arguments.task ?? item.arguments.path ?? "").slice(0, 40000) }));
         const durationMs = Date.now() - messageStartedAt;
         const tokenCount = Number.isFinite(response.usage.output) && response.usage.totalTokens > 0 ? response.usage.output : undefined;
         const generationMs = firstTokenAt === undefined ? undefined : Date.now() - firstTokenAt;
@@ -124,27 +135,30 @@ export async function runStandardAgent(projectId: string, command: StandardComma
           else if (text || thought || toolCalls.length) { state.conversation ??= []; state.conversation.push({ id, role: "assistant", ...fields, createdAt: new Date().toISOString() }); } });
       } else persist();
     }
-    if (event.type === "tool_execution_update" && event.toolName === "project_command" && Date.now() - lastToolUpdate > 700) {
-      const partialResult = event.partialResult as { content: Array<{ type: string; text?: string }> };
+    if (event.type === "tool_execution_update" && Date.now() - lastToolUpdate > 700) {
+      const partialResult = event.partialResult as { content: Array<{ type: string; text?: string }>; details?: Record<string, unknown>; structuredContent?: Record<string, unknown> };
       const output = partialResult.content.filter(item => item.type === "text").map(item => item.text ?? "").join("\n");
       if (output) {
         lastToolUpdate = Date.now();
         persist(state => { for (const message of state.conversation ?? []) {
           const tool = message.tools?.find(item => item.id === event.toolCallId);
-          if (tool?.status === "running") tool.output = output.length > 19000 ? `${output.slice(0, 19000)}\n（展示已截断）` : output;
+          if (tool?.status === "running") { tool.output = output.slice(0, 19000); tool.data = boundedToolData(partialResult.structuredContent ?? partialResult.details); }
         } });
       }
     }
     if (event.type === "tool_execution_end") {
       const { toolCallId, isError } = event;
-      const result = event.result as { content?: Array<{ type: string; text?: string }>; details?: { codingDirectory?: string }; structuredContent?: { exit_code?: number; wall_time_seconds?: number; truncated?: boolean } };
+      const result = event.result as { content?: Array<{ type: string; text?: string }>; details?: Record<string, unknown>; structuredContent?: { exit_code?: number; wall_time_seconds?: number; truncated?: boolean; [key: string]: unknown } };
       const output = result.content?.filter(item => item.type === "text").map(item => item.text ?? "").join("\n") ?? "";
+      const artifacts = isError ? [] : standardToolArtifacts(projectId, event.toolName, result);
       persist(state => { for (const message of state.conversation ?? []) { const tool = message.tools?.find(item => item.id === toolCallId); if (tool) {
         tool.status = isError ? "failed" : "completed";
+        if (artifacts.length) tool.artifacts = artifacts;
         // Keep readable coding results with their original tool turn, rather than exposing transport logs.
-        if (tool.name.startsWith("project_")) {
+        {
+          tool.data = boundedToolData(result.structuredContent ?? result.details);
           tool.output = output.length > 19000 ? `${output.slice(0, 19000)}\n（展示已截断）` : output;
-          tool.directory = result.details?.codingDirectory;
+          tool.directory = coding?.cwd;
           const execution = result.structuredContent;
           if (Number.isInteger(execution?.exit_code)) tool.exitCode = execution!.exit_code;
           if (typeof execution?.wall_time_seconds === "number") tool.durationMs = execution.wall_time_seconds * 1000;
@@ -152,33 +166,48 @@ export async function runStandardAgent(projectId: string, command: StandardComma
         }
       } } });
     }
+    if (event.type === "compaction_start") persist(state => { state.contextStatus = "compacting"; });
     if (event.type === "compaction_end") persist(state => { state.contextStatus = "ready"; if (event.result) state.compactionCount = (state.compactionCount ?? 0) + 1; });
   });
   try {
-    await session.bindExtensions({});
+    await session.bindExtensions({ ...(coding?.createUI ? { mode: "rpc" as const, uiContext: coding.createUI(session.extensionRunner.getUIContext()) } : {}),
+      onError: error => { writeFailure = new Error(`Pi 扩展执行失败（${error.event}）：${error.error}`); session.agent.abort(); },
+    });
+    if (writeFailure) throw writeFailure;
     persist(); await writes;
     // Quotes and text files are labelled reference material; image bytes use Pi's native image input.
     const referenceText = [command.quote ? `引用资料：\n${command.quote.text}` : "", ...(command.attachments ?? []).filter(item => item.type === "document").map(item => `附件 ${item.name}（资料）：\n${item.text}`)].filter(Boolean).join("\n\n");
     const images = (command.attachments ?? []).filter(item => item.type === "image").map(item => ({ type: "image" as const, data: item.data, mimeType: item.contentType }));
-    await session.prompt([referenceText, message].filter(Boolean).join("\n\n"), { expandPromptTemplates: false, images });
+    // The upstream command starts fire-and-forget work. The desktop run must own
+    // its completion; the SDK still invokes the installed session_before_compact policy.
+    if (resumeWithWorkspace) await session.sendCustomMessage({ customType: "code-workspace-selected", display: false,
+      content: "用户已通过本机选择器设置代码工作目录。继续完成上面的原始用户请求，先读取所选目录的实际文件，再生成或修改代码。" }, { triggerTurn: true });
+    else if (/^\/compact-now(?:\s|$)/.test(message)) await session.compact(message.slice("/compact-now".length).trim() || undefined);
+    else await session.prompt([referenceText, message].filter(Boolean).join("\n\n"), { expandPromptTemplates: false, images });
     await writes; if (writeFailure) throw writeFailure;
     deps.signal.throwIfAborted();
     if (session.agent.state.errorMessage) throw new Error(session.agent.state.errorMessage);
-    persist(state => { state.contextStatus = "ready"; appendStandardGenerationResult(state); }); await writes;
-    if (writeFailure) throw writeFailure;
-    // Follow-ups are optional: an unavailable auxiliary call must never turn a successful reply into a failed run.
-    const replyId = current.conversation?.at(-1)?.id;
-    const suggestions = await generateConversationSuggestions(current, model, deps.stream, deps.signal, command.language).catch(() => []);
-    deps.signal.throwIfAborted();
-    if (suggestions.length) await save(state => {
-      const latest = state.conversation?.at(-1);
-      if (latest && latest.id === replyId && latest.status === "completed") latest.suggestions = suggestions;
-    });
+    continueWithWorkspace = coding?.workspaceSelected?.() === true;
+    if (!continueWithWorkspace) {
+      persist(state => { state.contextStatus = "ready"; appendStandardGenerationResult(state); }); await writes;
+      if (writeFailure) throw writeFailure;
+      // Follow-ups are optional: an unavailable auxiliary call must never turn a successful reply into a failed run.
+      const replyId = current.conversation?.at(-1)?.id;
+      const suggestions = await generateConversationSuggestions(current, model, deps.stream, deps.signal, command.language).catch(() => []);
+      deps.signal.throwIfAborted();
+      if (suggestions.length) await save(state => {
+        const latest = state.conversation?.at(-1);
+        if (latest && latest.id === replyId && latest.status === "completed") latest.suggestions = suggestions;
+      });
+    }
   } finally {
     unsubscribe(); deps.signal.removeEventListener("abort", abort);
     // SDK disposal only detaches listeners; native MCP needs its shutdown event to cancel retries and close connections.
     try { await session.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }); }
     finally { session.dispose(); }
   }
-  } finally { coding?.close(); await modelRuntime.removeRuntimeApiKey(model.provider); }
+  } finally { provider.dispose(); await modelRuntime.removeRuntimeApiKey(model.provider); }
+  } finally { coding?.close(); }
+  // Rebuild the native tools and extensions in the selected cwd, keeping this run and its original user turn.
+  if (continueWithWorkspace) await runStandardAgentTurn(projectId, command, current, deps, true);
 }

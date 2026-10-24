@@ -9,7 +9,7 @@ import { platformApi, type PlatformAccountProfileResponse } from "../services/pl
 import { AuthenticatedRouteSessionProvider } from "./authenticated-route-session.js";
 import { ProfilePreferencesPanel } from "./profile-preferences-panel.js";
 
-const user = { id: "local", username: "local_workspace", displayName: "本地工作区", status: "active", mfaEnabled: false };
+const user = { id: "local", username: "Admin", displayName: "Admin", status: "active", mfaEnabled: false };
 const response = (changes = {}) => ({ user: { ...user, ...changes }, mfa: { enabled: false, enforcement: "totp" } } as PlatformAccountProfileResponse);
 beforeEach(async () => { await i18n.changeLanguage("zh-CN"); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });

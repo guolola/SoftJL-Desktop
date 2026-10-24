@@ -13,5 +13,7 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run test:desktop
-      - run: npm run test:renderer -- src/renderer/src/app/app-routes.test.ts src/renderer/src/features/coding-agent
+      - run: npm run test:modeling
+      - run: npm run test:contracts
+      - run: npm run test:renderer
       - run: npm run audit:docs

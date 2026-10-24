@@ -20,6 +20,9 @@ test("desktop has no login, rejects unrelated clients, and persists modeling pro
   const headers = { "x-softjl-desktop": options.capability };
   try {
     server = await startDesktopBackend(options);
+    const identity = (await server.app.inject({ url: "/api/auth/me", headers })).json().user;
+    assert.equal(identity.username, "Admin");
+    assert.equal(identity.displayName, "Admin");
     assert.equal((await server.app.inject({ url: "/api/desktop/integrations" })).statusCode, 403);
     const integrations = (await server.app.inject({ url: "/api/desktop/integrations", headers })).json();
     assert.equal(integrations.servers.length, 6);
@@ -54,23 +57,22 @@ test("desktop has no login, rejects unrelated clients, and persists modeling pro
       payload: {
         name: "Local Project",
         description: null,
-        projectMode: "standard",
-      },
+        },
     });
     assert.equal(created.statusCode, 201, created.body);
     const id = created.json().project.id;
     await mkdir(join(root, "project-code"));
     const codeDirectory = await realpath(join(root, "project-code"));
     const workspaceUrl = `/api/desktop/projects/${id}/conversation-code`;
-    assert.deepEqual((await server.app.inject({ url: workspaceUrl, headers })).json(), { directory: null, approvals: [], busy: false });
+    assert.deepEqual((await server.app.inject({ url: workspaceUrl, headers })).json(), { directory: null, approvals: [], notices: [], busy: false });
     assert.equal((await server.app.inject({ url: workspaceUrl })).statusCode, 403);
-    assert.equal((await server.app.inject({ method: "POST", url: `${workspaceUrl}/approvals/expired`, headers, payload: { runId: "old-run", allow: true } })).statusCode, 409);
+      assert.equal((await server.app.inject({ method: "POST", url: `${workspaceUrl}/approvals/expired`, headers, payload: { runId: "old-run", value: true } })).statusCode, 409);
     assert.equal((await server.app.inject({ method: "POST", url: workspaceUrl, headers, payload: { directory: codeDirectory } })).statusCode, 403);
     assert.equal((await server.app.inject({ method: "POST", url: workspaceUrl, headers: { ...headers, "x-softjl-directory-selection": options.directorySelectionCapability }, payload: { directory: codeDirectory } })).statusCode, 200);
     assert.equal((await server.app.inject({ url: workspaceUrl, headers })).json().directory, codeDirectory);
-    const professional = await server.app.inject({ method: "POST", url: "/api/projects", headers, payload: { name: "Engineering project", description: null, projectMode: "professional" } });
-    const professionalWorkspaceUrl = `/api/desktop/projects/${professional.json().project.id}/conversation-code`;
-    assert.equal((await server.app.inject({ method: "POST", url: professionalWorkspaceUrl, headers: { ...headers, "x-softjl-directory-selection": options.directorySelectionCapability }, payload: { directory: codeDirectory } })).statusCode, 200);
+    const secondProject = await server.app.inject({ method: "POST", url: "/api/projects", headers, payload: { name: "Second project", description: null, } });
+    const secondWorkspaceUrl = `/api/desktop/projects/${secondProject.json().project.id}/conversation-code`;
+    assert.equal((await server.app.inject({ method: "POST", url: secondWorkspaceUrl, headers: { ...headers, "x-softjl-directory-selection": options.directorySelectionCapability }, payload: { directory: codeDirectory } })).statusCode, 200);
     for (const [method, url] of [
       ["GET", "/api/desktop/agents"],
       ["GET", "/api/desktop/projects/" + id + "/coding"],
@@ -84,10 +86,15 @@ test("desktop has no login, rejects unrelated clients, and persists modeling pro
     const tables = await server.db.query<{ table_name: string }>("select table_name from information_schema.tables where table_schema='public'");
     assert.ok(!tables.rows.some((row) => /^(desktop_coding_tasks|desktop_workspaces|mcp_)/u.test(row.table_name)));
     const firstOrigin = server.origin;
+    await server.db.query("update users set username='local_workspace', display_name='本地工作区' where id=$1", [identity.id]);
     await server.close();
     server = await startDesktopBackend(options);
+    const renamed = (await server.app.inject({ url: "/api/auth/me", headers })).json().user;
+    assert.equal(renamed.id, identity.id);
+    assert.equal(renamed.username, "Admin");
+    assert.equal(renamed.displayName, "Admin");
     assert.equal((await server.app.inject({ url: workspaceUrl, headers })).json().directory, codeDirectory);
-    assert.equal((await server.app.inject({ url: professionalWorkspaceUrl, headers })).json().directory, codeDirectory);
+    assert.equal((await server.app.inject({ url: secondWorkspaceUrl, headers })).json().directory, codeDirectory);
     assert.equal(server.origin, firstOrigin);
     assert.deepEqual((await server.app.inject({ url: workspaceUrl, headers })).json().approvals, []);
     assert.equal((await server.app.inject({ method: "DELETE", url: workspaceUrl, headers })).json().directory, null);

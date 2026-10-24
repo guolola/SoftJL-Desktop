@@ -1,4 +1,4 @@
-// Verifies the single-server LLM scheduler gates real model calls before pipelines use it.
+// Verifies immediate desktop LLM execution, streaming backpressure and request telemetry.
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProviderSettings } from "../../../../shared/contracts/index.js";
@@ -52,87 +52,38 @@ test("scheduled transport forwards transient retries and records their count wit
   assert.equal(telemetry[0].outcome, "success");
 });
 
-test("in-memory LLM scheduler enforces global, project, user, provider and run limits", async () => {
-  const scheduler = createInMemoryLlmScheduler({
-    globalConcurrency: 2,
-    providerConcurrency: 2,
-    projectConcurrency: 1,
-    userConcurrency: 1,
-    runConcurrency: 1,
-  });
-  const started: string[] = [];
-  const releases: Array<() => void> = [];
+test("desktop starts all requests for the same provider, project, user and run without queuing", async () => {
+  const scheduler = createInMemoryLlmScheduler();
+  const statuses: string[] = [];
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  let started = 0;
+  const requests = Array.from({ length: 12 }, (_, index) => scheduler.run(context(), async () => {
+    started++;
+    await pending;
+    return index;
+  }, status => { statuses.push(status.status); }));
 
-  const first = scheduler.run(context(), async () => {
-    started.push("first");
-    await new Promise<void>((resolve) => releases.push(resolve));
-    return "first";
-  });
-  await Promise.resolve();
-  assert.deepEqual(started, ["first"]);
-
-  const sameProject = scheduler.run(context({ runId: "run-2", userId: "user-2" }), async () => {
-    started.push("same-project");
-    return "same-project";
-  });
-  const sameUser = scheduler.run(context({ runId: "run-3", projectId: "project-2" }), async () => {
-    started.push("same-user");
-    return "same-user";
-  });
-  const sameRun = scheduler.run(context({ projectId: "project-2", userId: "user-2" }), async () => {
-    started.push("same-run");
-    return "same-run";
-  });
-
-  await Promise.resolve();
-  assert.deepEqual(started, ["first"]);
-  assert.equal(scheduler.snapshot().queued, 3);
-
-  releases.shift()?.();
-  assert.equal(await first, "first");
-  assert.equal(await sameProject, "same-project");
-  assert.equal(await sameUser, "same-user");
-  assert.equal(await sameRun, "same-run");
-  assert.deepEqual(started, ["first", "same-project", "same-user", "same-run"]);
+  assert.equal(started, 12);
+  assert.deepEqual(scheduler.snapshot(), { running: 12, queued: 0 });
+  assert.deepEqual(statuses, Array(12).fill("running"));
+  release();
+  assert.deepEqual(await Promise.all(requests), Array.from({ length: 12 }, (_, index) => index));
+  assert.deepEqual(scheduler.snapshot(), { running: 0, queued: 0 });
+  assert.equal(statuses.filter(status => status === "completed").length, 12);
 });
 
-test("in-memory LLM scheduler cancels queued work before it calls the provider", async () => {
-  const scheduler = createInMemoryLlmScheduler({
-    globalConcurrency: 1,
-    providerConcurrency: 1,
-    projectConcurrency: 1,
-    userConcurrency: 1,
-    runConcurrency: 1,
-  });
-  let queuedCalled = false;
-  let releaseFirst!: () => void;
-
-  const first = scheduler.run(context(), async () => {
-    await new Promise<void>((resolve) => {
-      releaseFirst = resolve;
-    });
-  });
-  await Promise.resolve();
-
-  const queued = scheduler.run(context({ runId: "run-2" }), async () => {
-    queuedCalled = true;
-  });
-  scheduler.cancelRun("run-2");
-  releaseFirst();
-  await first;
-
-  await assert.rejects(queued, /cancelled/i);
-  assert.equal(queuedCalled, false);
+test("desktop request accounting recovers after synchronous and asynchronous failures", async () => {
+  const scheduler = createInMemoryLlmScheduler();
+  await assert.rejects(scheduler.run(context(), () => { throw new Error("sync failure"); }), /sync failure/);
+  assert.deepEqual(scheduler.snapshot(), { running: 0, queued: 0 });
+  await assert.rejects(scheduler.run(context(), async () => { throw new Error("async failure"); }), /async failure/);
+  assert.deepEqual(scheduler.snapshot(), { running: 0, queued: 0 });
+  assert.equal(await scheduler.run(context(), async () => "recovered"), "recovered");
 });
 
 test("scheduled LLM transport forwards abort signals and composer reasoning to the provider transport", async () => {
-  const scheduler = createInMemoryLlmScheduler({
-    globalConcurrency: 1,
-    providerConcurrency: 1,
-    projectConcurrency: 1,
-    userConcurrency: 1,
-    runConcurrency: 1,
-  });
+  const scheduler = createInMemoryLlmScheduler();
   const controller = new AbortController();
   let receivedInput: StreamChatCompletionInput | undefined;
   const providerTransport: LlmTransport = {
@@ -162,46 +113,50 @@ test("scheduled LLM transport forwards abort signals and composer reasoning to t
   assert.equal(receivedInput?.reasoning, true);
 });
 
-test("stream scheduling applies backpressure until chunks are consumed", async () => {
-  const scheduler = createInMemoryLlmScheduler({
-    globalConcurrency: 1,
-    providerConcurrency: 1,
-    projectConcurrency: 1,
-    userConcurrency: 2,
-    runConcurrency: 1,
+test("slow streams retain backpressure while other requests start immediately", async () => {
+  const scheduler = createInMemoryLlmScheduler();
+  let produced = 0;
+  const first = scheduler.stream(context(), async function* () {
+    for (const chunk of ["a", "b", "c", "d"]) { produced++; yield chunk; }
   });
-  const started: string[] = [];
-  let releaseFirstChunk!: () => void;
+  const iterator = first[Symbol.asyncIterator]();
+  assert.equal((await iterator.next()).value, "a");
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(produced, 3, "the provider pauses with one buffered chunk and one pending chunk");
+  const second: string[] = [];
+  for await (const chunk of scheduler.stream(context(), async function* () { yield "other"; })) second.push(chunk);
+  assert.deepEqual(second, ["other"]);
+  assert.deepEqual(scheduler.snapshot(), { running: 1, queued: 0 });
+  const remaining: string[] = [];
+  for await (const chunk of { [Symbol.asyncIterator]: () => iterator }) remaining.push(chunk);
+  assert.deepEqual(remaining, ["b", "c", "d"]);
+  assert.deepEqual(scheduler.snapshot(), { running: 0, queued: 0 });
+});
 
-  const first = scheduler.stream(
-    context({ runId: "run-1", userId: "user-1" }),
-    async function* () {
-      started.push("first");
-      yield "a";
-      await new Promise<void>((resolve) => {
-        releaseFirstChunk = resolve;
+test("active desktop streams still abort and record cancellation telemetry", async () => {
+  const scheduler = createInMemoryLlmScheduler();
+  const controller = new AbortController();
+  const telemetry: LlmRequestTelemetry[] = [];
+  let started!: () => void;
+  const providerStarted = new Promise<void>(resolve => { started = resolve; });
+  const transport = createScheduledLlmTransport({ scheduler, context: context(),
+    analyticsStore: { recordTelemetry: async entry => { telemetry.push(entry); } },
+    transport: { async *streamChatCompletion(input) {
+      started();
+      await new Promise<void>((_, reject) => {
+        input.abortSignal!.addEventListener("abort", () => reject(input.abortSignal!.reason), { once: true });
       });
-      yield "b";
-    },
-  );
-  const second = scheduler.stream(
-    context({ runId: "run-2", userId: "user-2" }),
-    async function* () {
-      started.push("second");
-      yield "c";
-    },
-  );
-
-  const firstIterator = first[Symbol.asyncIterator]();
-  assert.equal((await firstIterator.next()).value, "a");
-  const secondIterator = second[Symbol.asyncIterator]();
-  const secondNext = secondIterator.next();
-  await Promise.resolve();
-
-  assert.deepEqual(started, ["first"]);
-  releaseFirstChunk();
-  assert.equal((await firstIterator.next()).value, "b");
-  assert.equal((await firstIterator.next()).done, true);
-  assert.equal((await secondNext).value, "c");
-  assert.deepEqual(started, ["first", "second"]);
+      yield "unreachable";
+    } },
+  });
+  const stream = transport.streamChatCompletion({ providerSettings, messages: [], abortSignal: controller.signal });
+  const next = stream[Symbol.asyncIterator]().next();
+  await providerStarted;
+  controller.abort(new Error("request cancelled"));
+  scheduler.cancelRun(context().runId);
+  await assert.rejects(next, /request cancelled/);
+  assert.deepEqual(scheduler.snapshot(), { running: 0, queued: 0 });
+  assert.equal(telemetry.length, 1);
+  assert.equal(telemetry[0].outcome, "cancelled");
+  assert.equal(telemetry[0].queueMs, 0);
 });

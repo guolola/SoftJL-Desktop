@@ -50,11 +50,11 @@ export function StandardWorkspace({ projectId, canEdit, header, onNavigate, onOp
           {!canEdit && <p className="px-6 py-3 text-sm text-muted-foreground">{t("standardProject.readOnly")}</p>}
           <ConnectionState phase={session.connection} onRetry={() => void session.reconnect()} className="m-3" />
         </>}
-        {sectionContent ?? (selected ? <StandardDiagramDetailPage key={`${projectId}:${selected.id}`} diagram={selected} disabled={disabled} canEdit={canEdit} onSave={model => session.saveModel(selected.id, model)} />
+        {sectionContent ?? (selected ? <StandardDiagramDetailPage projectId={projectId} key={`${projectId}:${selected.id}`} diagram={selected} disabled={disabled} canEdit={canEdit} onSave={model => session.saveModel(selected.id, model)} />
         : view === "home" ? <ProjectConversation key={projectId} projectId={projectId} state={state} canEdit={canEdit} disabled={disabled} canCancel={canEdit && !pending && !disconnected}
           displayName={account?.user.displayName} onSend={session.start} onCancel={session.cancel} onFeedback={session.feedback} />
         : view === "tests" ? <StandardTestsPage state={state} />
-        : <StandardDocumentsPage state={state} disabled={disabled} />)}
+        : <StandardDocumentsPage projectId={projectId} state={state} disabled={disabled} />)}
       </>}
     </div>
   </DefaultPagesLayout>;

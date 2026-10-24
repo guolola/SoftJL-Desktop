@@ -12,3 +12,17 @@ release/
 Thumbs.db
 *.log
 /data/
+
+# Publish only the documents and screenshots linked from the root README.
+/docs/**
+!/docs/README.md
+!/docs/architecture/
+!/docs/architecture/platform-overview.md
+!/docs/architecture/modeling-capabilities.md
+!/docs/development/
+!/docs/development/desktop-runtime.md
+!/docs/integrations/
+!/docs/integrations/agent-integrations.md
+!/docs/images/
+!/docs/images/readme-quick-modeling-zh.jpg
+!/docs/images/readme-quick-modeling-diagram.jpg

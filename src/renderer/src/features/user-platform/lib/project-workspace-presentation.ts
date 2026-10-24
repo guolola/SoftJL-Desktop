@@ -153,6 +153,5 @@ export function getProjectRunOperatorSearchText(
 }
 
 export function getProjectRunModelLabel(run: PlatformRunSummary, t?: TFunction) {
-  if (run.model === "offline-demo-fixed-artifacts") return t ? t("uxReview.demoData") : "演示数据";
   return run.model?.trim() || "默认模型";
 }

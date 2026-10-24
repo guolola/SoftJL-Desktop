@@ -1,16 +1,17 @@
 // Covers supported settings navigation, retained drafts and connection settings requests.
 import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { i18n } from '../../../shared/i18n/i18n';
 import { AppI18nProvider } from '../../../shared/i18n/i18n-provider';
 import { ThemeProvider } from '../../../shared/ui/theme-provider';
 import { SidebarProvider } from '../../../shared/ui/sidebar';
 import { invalidateProviderConfigCache } from '../services/provider-config-cache';
 import { AccountDialog } from './account-dialog';
-const user={id:'local',username:'local_workspace',displayName:'本地工作区',status:'active',mfaEnabled:false};
+const user={id:'local',username:'Admin',displayName:'Admin',status:'active',mfaEnabled:false};
 function openSettings(request=0){return render(<AppI18nProvider><ThemeProvider><SidebarProvider><AccountDialog initialUser={user} onNavigate={vi.fn()} globalSettingsRequestId={request}/></SidebarProvider></ThemeProvider></AppI18nProvider>);}
 beforeEach(()=>{localStorage.clear();invalidateProviderConfigCache();vi.stubGlobal('fetch',vi.fn(async(url)=>Response.json(String(url).includes('/integrations')?{servers:[],skills:[]}:{providerConfigs:[]})));});
+afterEach(() => { vi.restoreAllMocks(); });
 it('shows only profile, models, MCP and Skills and opens profile by default', async () => {
   openSettings();
   await userEvent.click(screen.getByRole('button', { name: i18n.t('account.settings') }));
@@ -46,6 +47,26 @@ it('preserves a profile draft across pages and allows resetting it', async () =>
   expect(within(dialog).getByRole('button', { name: i18n.t('account.block37.save') })).toBeDisabled();
 });
 it('opens the model page for a connection settings request and closes on cancel',async()=>{openSettings(1);await userEvent.click(screen.getByRole('button',{name:i18n.t('account.settings')}));const dialog=await screen.findByRole('dialog');expect(within(dialog).getByRole('tab',{name:i18n.t('account.block37.models')})).toHaveAttribute('aria-selected','true');await userEvent.click(within(dialog).getByRole('button',{name:i18n.t('account.block37.cancel')}));expect(screen.queryByRole('dialog')).not.toBeInTheDocument();});
+
+it.each(['outside', 'escape', 'cancel'])('discards unsaved settings on %s dismissal without confirmation or saving', async method => {
+  const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  const keyboard = userEvent.setup();
+  openSettings();
+  const open = () => keyboard.click(screen.getByRole('button', { name: i18n.t('account.settings') }));
+  await open();
+  const dialog = await screen.findByRole('dialog');
+  await keyboard.clear(within(dialog).getByLabelText(i18n.t('account.displayName')));
+  await keyboard.type(within(dialog).getByLabelText(i18n.t('account.displayName')), '未保存的昵称');
+  expect(within(dialog).getByRole('status')).toHaveTextContent(i18n.t('account.block37.unsaved'));
+  if (method === 'outside') await keyboard.click(document.querySelector('[data-slot="dialog-overlay"]')!);
+  else if (method === 'escape') await keyboard.keyboard('{Escape}');
+  else await keyboard.click(within(dialog).getByRole('button', { name: i18n.t('account.block37.cancel') }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(confirm).not.toHaveBeenCalled();
+  expect(vi.mocked(fetch).mock.calls.some(([url]) => /account\/profile/.test(String(url)))).toBe(false);
+  await open();
+  expect(within(await screen.findByRole('dialog')).getByLabelText(i18n.t('account.displayName'))).toHaveValue('Admin');
+});
 
 it('keeps every desktop settings category reachable with the keyboard', async () => {
   openSettings();

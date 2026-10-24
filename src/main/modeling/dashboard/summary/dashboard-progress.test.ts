@@ -1,39 +1,27 @@
-// Verifies output-type coverage, including scoped models, replaced outputs and document versions.
-import assert from "node:assert/strict";
+// Counts current conversation outputs without retired engineering stages or task-success inference.
 import test from "node:test";
-import { dashboardProgressArtifactTypes } from "../../../../shared/contracts/index.js";
+import assert from "node:assert/strict";
 import { buildDashboardProgress } from "./dashboard-progress.js";
-
-test("empty projects retain all twenty output types", () => {
-  assert.deepEqual(buildDashboardProgress({}, []), {
-    completed: 0, total: 20, percentage: 0, stages: [
-      { kind: "feasibility", completed: 0, total: 3 }, { kind: "requirements", completed: 0, total: 7 },
-      { kind: "design", completed: 0, total: 7 }, { kind: "document", completed: 0, total: 3 },
-    ],
-  });
+import { createStandardProjectState, standardDiagramKinds } from "../../../../shared/contracts/index.js";
+import { standardModelFixture } from "../../../../shared/contracts/testing/index.js";
+test("empty projects expose only the eight models and two specifications", () => {
+  const progress = buildDashboardProgress({}, []);
+  assert.equal(progress.total, 10); assert.equal(progress.completed, 0);
+  assert.deepEqual(progress.stages.map(item => [item.kind, item.total]), [["requirements", 3], ["design", 5], ["document", 2]]);
 });
-test("multiple analysis and sequence models count once per type, not per use case", () => {
-  const state = {
-    models: { "analysis:a": { diagramKind: "analysis" }, "analysis:b": { diagramKind: "analysis" }, context: { diagramKind: "context" } },
-    designModels: { "sequence:a": { diagramKind: "sequence" }, "sequence:b": { diagramKind: "sequence" } },
-    feasibilityContextModel: { diagramKind: "context" },
-  };
-  const progress = buildDashboardProgress(state, [
-    { documentKind: "requirementsSpec", status: "active" }, { documentKind: "requirementsSpec", status: "active" },
-    { documentKind: "softwareDesignSpec", status: "deleted" },
-  ]);
-  assert.equal(progress.completed, 4);
-  assert.equal(progress.percentage, 20);
-  assert.deepEqual(progress.stages?.map(stage => stage.completed), [1, 1, 1, 1]);
-  assert.equal(buildDashboardProgress({ ...state, models: {} }, []).completed, 2);
+test("counts each completed conversation model type once and requires a saved model and preview", () => {
+  const state = createStandardProjectState();
+  state.diagrams.first = { id: "first", kind: "activity", title: "借阅", status: "completed", model: standardModelFixture("activity"), svg: "<svg/>" };
+  state.diagrams.second = { ...state.diagrams.first, id: "second" };
+  state.diagrams.failed = { id: "failed", kind: "class", title: "类", status: "failed", model: standardModelFixture("class"), svg: "<svg/>" };
+  state.diagrams.missing = { id: "missing", kind: "usecase", title: "用例", status: "completed" };
+  assert.equal(buildDashboardProgress({ standardProject: state }, []).completed, 1);
+  assert.equal(buildDashboardProgress({ models: { class: {} }, designModels: { class: {} } }, []).completed, 0);
 });
-test("all output types reach full coverage without counting unknown or legacy aliases", () => {
-  const models = Object.fromEntries(dashboardProgressArtifactTypes.filter(type => type.startsWith("requirements:")).map(type => [type, { diagramKind: type.split(":")[1] }]));
-  const designModels = Object.fromEntries(dashboardProgressArtifactTypes.filter(type => type.startsWith("design:")).map(type => [type, { diagramKind: type.split(":")[1] }]));
-  const progress = buildDashboardProgress({ models: { ...models, unknown: { diagramKind: "unknown" } }, designModels,
-    feasibilityContextModel: { diagramKind: "context" }, feasibilityBusinessFlow: { model: { diagramKind: "activity" } },
-    feasibilityImplementationPlan: { candidates: [] },
-  }, ["requirementsSpec", "softwareDesignSpec", "feasibilityStudy"].map(documentKind => ({ documentKind: documentKind as "requirementsSpec" | "softwareDesignSpec" | "feasibilityStudy", status: "active" })));
-  assert.equal(progress.completed, 20);
-  assert.equal(progress.percentage, 100);
+test("all current outputs reach full progress while deleted documents do not count", () => {
+  const state = createStandardProjectState();
+  for (const kind of standardDiagramKinds) state.diagrams[kind] = { id: kind, kind, title: kind, status: "completed", model: standardModelFixture(kind), svg: "<svg/>" };
+  const docs = [{ documentKind: "requirementsSpec" as const, status: "active" as const }, { documentKind: "softwareDesignSpec" as const, status: "active" as const }];
+  assert.equal(buildDashboardProgress({ standardProject: state }, docs).percentage, 100);
+  assert.equal(buildDashboardProgress({ standardProject: state }, docs.map(item => ({ ...item, status: "deleted" as const }))).completed, 8);
 });

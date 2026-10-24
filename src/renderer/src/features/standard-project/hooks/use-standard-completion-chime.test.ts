@@ -56,7 +56,7 @@ it("keeps cancellations silent and does not replay a completed run after remount
   expect(playCompletionChime).toHaveBeenCalledOnce();
 });
 
-it.each([[], ["read_project", "read_diagram"], ["ask_questions"]])("keeps conversational-only tools silent: %j", (...tools) => {
+it.each([[], ["read_project", "read_diagram"], ["confirm_generation_scope"]])("keeps conversational-only tools silent: %j", (...tools) => {
   const hook = mount(snapshot("running", tools));
   hook.rerender({ projectId: "p", state: snapshot("completed", tools) });
   expect(playCompletionChime).not.toHaveBeenCalled();

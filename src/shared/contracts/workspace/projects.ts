@@ -16,13 +16,6 @@ const optionalDescriptionSchema = z.preprocess(
   z.string().min(1).max(2000).nullable(),
 );
 
-// The project mode is immutable and must be explicit in persisted records and responses.
-export const projectModeSchema = z.enum(["standard", "professional"]);
-export type ProjectMode = z.infer<typeof projectModeSchema>;
-export function resolveProjectMode(value: unknown): ProjectMode {
-  return projectModeSchema.parse(value);
-}
-
 export const projectStatusSchema = z.enum(["active", "archived", "deleted"]);
 export type ProjectStatus = z.infer<typeof projectStatusSchema>;
 
@@ -73,7 +66,6 @@ const optionalProjectBackgroundKeySchema = z
 
 export const projectDtoSchema = z
   .object({
-    projectMode: projectModeSchema,
     id: z.string().min(1),
     name: publicNameSchema,
     description: optionalDescriptionSchema,
@@ -105,7 +97,6 @@ export const projectDtoSchema = z
 export type ProjectDto = z.infer<typeof projectDtoSchema>;
 
 export const projectCreateRequestSchema = z.object({
-  projectMode: projectModeSchema.default("standard"),
   name: publicNameSchema,
   description: optionalDescriptionSchema.default(null),
   retentionPolicy: projectRetentionPolicySchema.default("manual").optional(),
@@ -216,12 +207,8 @@ export const projectListResponseSchema = z.object({
 });
 export type ProjectListResponse = z.infer<typeof projectListResponseSchema>;
 
-export const generationExecutionModeSchema = z.enum(["offline-demo", "provider"]);
-export type GenerationExecutionMode = z.infer<typeof generationExecutionModeSchema>;
-
 export const projectResponseSchema = z.object({
   project: projectDtoSchema,
-  generationExecutionMode: generationExecutionModeSchema,
   membership: projectMemberDtoSchema.optional(),
   currentUserRole: projectMemberRoleSchema.optional(),
   capabilities: z.array(projectPermissionSchema).optional(),

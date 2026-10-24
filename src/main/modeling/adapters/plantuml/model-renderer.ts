@@ -239,8 +239,8 @@ function renderSequence(
   if (rendered.size !== model.messages.length || renderedFragments.size !== model.fragments.length) throw new Error("Sequence rendering omitted messages or fragments");
 }
 
-export function generatePlantUmlArtifacts(models: DiagramModelSpec[], stage: "requirements" | "feasibility" = "requirements"): PlantUmlArtifact[] {
-  return models.map((model) => ({ modelId: "modelId" in model ? model.modelId : undefined, diagramKind: model.diagramKind, ...render(model, stage) }));
+export function generatePlantUmlArtifacts(models: DiagramModelSpec[]): PlantUmlArtifact[] {
+  return models.map((model) => ({ modelId: "modelId" in model ? model.modelId : undefined, diagramKind: model.diagramKind, ...render(model, "requirements") }));
 }
 export function generateDesignPlantUmlArtifacts(models: DesignDiagramModelSpec[]): DesignPlantUmlArtifact[] {
   return models.map((model) => ({ modelId: model.modelId, diagramKind: model.diagramKind, ...render(model, "design") }));

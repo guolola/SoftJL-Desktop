@@ -8,14 +8,16 @@ import { createConversationAttachments, toAssistantAttachment, toProjectAttachme
 import { floatingAlert } from "../../../shared/ui/floating-alert.js";
 import { clearConversationDraft } from "./use-conversation-draft.js";
 import { conversationDate } from "../lib/conversation-presentation.js";
+import { conversationArtifactParts } from "../lib/conversation-artifacts.js";
 
 export type SendConversationCommand = (command: StandardCommand) => Promise<boolean | undefined> | undefined;
 const convert = (message: StandardConversationMessage): ThreadMessageLike => ({ id: message.id, role: message.role,
     // Missing dates stay deterministic in the runtime and are omitted from the date UI.
     createdAt: conversationDate(message.createdAt) ?? new Date(0),
     content: [...(message.reasoning ? [{ type: "reasoning" as const, text: message.reasoning }] : []),
-      ...(message.tools ?? []).map(tool => ({ type: "tool-call" as const, toolCallId: tool.id, toolName: tool.name, args: tool.request ? { request: tool.request, ...(tool.status === "running" && tool.output ? { liveOutput: tool.output } : {}) } : {},
-        ...(tool.status !== "running" ? { result: tool.output !== undefined ? { output: tool.output, directory: tool.directory, exitCode: tool.exitCode, durationMs: tool.durationMs, truncated: tool.truncated } : tool.status, isError: tool.status === "failed" } : {}) })), { type: "text", text: message.text }],
+      ...(message.tools ?? []).map(tool => ({ type: "tool-call" as const, toolCallId: tool.id, toolName: tool.name, args: JSON.parse(JSON.stringify({ ...tool.arguments, data: tool.data, ...(tool.request ? { request: tool.request } : {}), ...(tool.status === "running" && tool.output ? { liveOutput: tool.output } : {}) })),
+        ...(tool.status !== "running" ? { result: tool.output !== undefined ? { data: tool.data, output: tool.output, directory: tool.directory, exitCode: tool.exitCode, durationMs: tool.durationMs, truncated: tool.truncated } : tool.status, isError: tool.status === "failed" } : {}) })),
+      ...conversationArtifactParts(message), { type: "text", text: message.text }],
     attachments: message.attachments?.map(toAssistantAttachment), metadata: { custom: { quote: message.quote },
       ...(message.timing ? { timing: message.timing } : {}),
       ...(message.feedback ? { submittedFeedback: { type: message.feedback } } : {}) },

@@ -40,17 +40,25 @@ const equal = (left: unknown, right: string) =>
   timingSafeEqual(Buffer.from(left), Buffer.from(right));
 export async function startDesktopBackend(options: DesktopBackendOptions) {
   await mkdir(options.dataDir, { recursive: true });
-  const storage = await openDatabase(join(options.dataDir, "database"));
+  const storage = await openDatabase(options.dataDir);
   const { db } = storage;
   const repository = createPostgresAuthRepository(db);
-  let user = await repository.findUserByUsername("local_workspace");
+  const identity = (await db.query<{ id: string }>(
+    "select id from users where username in ('Admin', 'admin', 'local_workspace') order by case when username='Admin' then 0 else 1 end limit 1",
+  )).rows[0];
+  let user = identity ? await repository.getUser(identity.id) : null;
   if (!user)
     user = await repository.createUser({
-      username: "local_workspace",
-      displayName: "本地工作区",
+      username: "admin",
+      displayName: "Admin",
       passwordHash: randomBytes(64).toString("hex"),
     });
   if (!user) throw new Error("无法创建本地工作区");
+  // Rename the existing desktop identity in place so project/provider ownership is retained.
+  if (user.username !== "Admin") {
+    await db.query("update users set username='Admin', display_name='Admin' where id=$1", [user.id]);
+    user = (await repository.getUser(user.id))!;
+  }
   const localUser = user;
   let privateSession = await repository.createSession({
     userId: user.id,
@@ -72,6 +80,7 @@ export async function startDesktopBackend(options: DesktopBackendOptions) {
   process.env.UML_MODEL_CATALOG_DIR = join(options.dataDir, "model-catalog");
   process.env.UML_AVATAR_STORAGE_DIR = join(options.dataDir, "avatars");
   process.env.UML_RUN_QUEUE_MODE = "local";
+  process.env.PI_CODING_AGENT_DIR = join(options.dataDir, "pi-agent");
   process.env.UML_PLANTUML_JAVA_PATH = options.javaPath;
   process.env.UML_PLANTUML_JAR_PATH = options.jarPath;
   const integrations = await IntegrationStore.open(join(options.dataDir, "integrations"), options.secret);

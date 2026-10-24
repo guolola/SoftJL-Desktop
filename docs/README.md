@@ -13,15 +13,12 @@
 
 - [桌面架构](architecture/platform-overview.md)
 - [建模能力](architecture/modeling-capabilities.md)
-- [可信生成](architecture/trusted-generation.md)
-- [快速建模 Agent](architecture/standard-project-agent.md)
 - [运行与打包](development/desktop-runtime.md)
-- [模型服务接入](integrations/openai-compatible-provider.md)
 - [MCP 与 Skill 管理](integrations/agent-integrations.md)
 
 ## 操作与维护
 
-以源码、配置和测试为事实源。部署网站、SEO 与集群 Worker 运维不属于此桌面仓库。
+以源码、配置和测试为事实源。docs 仅跟踪项目首页直接引用的说明与展示图片；组件选型、实现参考及未展示的截图保留在本地，由根 .gitignore 排除。部署网站、SEO 与集群 Worker 运维不属于此桌面仓库。
 
 ## 验证
 
