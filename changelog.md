@@ -3,7 +3,7 @@
 
 ## v0.1.0
 
-首个 Windows x64 安装包版本，定位为基于 Pi Coding Agent 的个人本地编程助手。安装包与 SHA-256 校验文件通过 [GitHub Releases](https://github.com/guolola/SoftJL-Desktop/releases) 分发，源码由同名 Git 标签保留。
+首个 Windows x64 安装包版本，面向大学生的软件类毕业设计、课程设计与 UML 作业，提供 UML 规范指导、PlantUML 绘图、模型校验、任务与会话跟踪，并衔接测试用例、说明书与本机编码。应用基于 Pi Coding Agent；[官方下载页](https://jianglisoftware.com/download) 提供下载入口，安装包与 SHA-256 校验文件通过 [GitHub Releases](https://github.com/guolola/SoftJL-Desktop/releases) 分发，源码由同名 Git 标签保留。
 
 ### 功能
 

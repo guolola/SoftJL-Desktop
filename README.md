@@ -1,12 +1,68 @@
+<p align="center">
+  <a href="https://jianglisoftware.com/">
+    <img src="resources/public/brand/uml-platform-logo.svg" width="120" height="120" alt="SoftJL Logo" />
+  </a>
+</p>
+
+<div align="center">
+
 # SoftJL Desktop
 
-**基于 [Pi Coding Agent](https://github.com/earendil-works/pi) 实现的个人 Windows 本地 Coding Agent**，集成需求整理、结构化建模和说明书生成能力。在同一项目对话中阅读与修改本机代码、执行 PowerShell 命令和测试，并使用项目中的模型与文档作为实现上下文。项目数据保存在本机，模型服务由使用者自行配置（BYOK）。
+<p>
+  <strong>面向大学生毕业设计与课程设计的本地建模与编程助手</strong><br />
+  规范图表、检查模型、跟踪过程，把需求、设计、测试、说明书与代码放在同一个项目中<br />
+  <sub>UML 规范指导 · PlantUML 绘图 · 模型校验 · 任务与会话跟踪 · Pi Coding Agent</sub>
+</p>
 
-[下载最新版本](https://github.com/guolola/SoftJL-Desktop/releases/latest) · [全部版本与更新说明](https://github.com/guolola/SoftJL-Desktop/releases) · [更新记录](changelog.md)
+<p>
+  <a href="https://jianglisoftware.com/download"><img src="https://img.shields.io/badge/官方下载-Windows_安装包-2563eb?style=for-the-badge" alt="SoftJL 官方下载" /></a>
+  <a href="https://github.com/guolola/SoftJL-Desktop/releases"><img src="https://img.shields.io/badge/GitHub-Releases-181717?style=for-the-badge" alt="GitHub Releases" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-7c3aed?style=for-the-badge" alt="Apache-2.0 License" /></a>
+</p>
+
+<p>
+  <a href="https://github.com/guolola/SoftJL-Desktop/releases/latest"><img src="https://img.shields.io/github/v/release/guolola/SoftJL-Desktop?style=flat-square" alt="最新发行版本" /></a>
+  <a href="https://github.com/earendil-works/pi"><img src="https://img.shields.io/badge/Pi_Agent-1.3.0-7c3aed?style=flat-square" alt="基于 Pi Agent 1.3.0" /></a>
+  <a href="https://github.com/topics/coding-agent"><img src="https://img.shields.io/badge/Coding_Agent-本机编码-0f766e?style=flat-square" alt="Coding Agent" /></a>
+  <img src="https://img.shields.io/badge/UML-PlantUML-f59e0b?style=flat-square" alt="UML 与 PlantUML" />
+  <img src="https://img.shields.io/badge/Desktop-Electron%20%2B%20React-61dafb?style=flat-square" alt="Electron and React" />
+  <img src="https://img.shields.io/badge/API-Fastify%20%2B%20Zod-111827?style=flat-square" alt="Fastify and Zod" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20x64-339933?style=flat-square" alt="Windows x64" />
+</p>
+
+从需求到设计图，从测试用例到 Word 说明书，再接着实现代码。少一些工具切换和材料整理，多一些时间理解、验证和讲清自己的系统。
+
+</div>
+
+## 项目简介
+
+**SoftJL Desktop 服务于正在做软件类毕业设计、课程设计和 UML 作业的大学生**：把需求讨论、规范建模、模型检查、过程跟踪、测试用例、工程说明书和本机编码集中在一个项目中，帮助你整理提交材料、复核设计问题和准备答辩。
+
+- **图表有规范可依**：UML 用例、活动、类和时序模型参考 OMG UML 2.5.1 的语义与记法；按结构化模型生成 PlantUML 图形，同时支持功能结构、总体架构、E-R 和数据库表关系视图。八类图表均可继续编辑和导出。
+- **模型问题有检查**：生成和编辑时按图种校验结构、标识引用与关系语义，并检查实际绘图结果；失败返回具体原因，由 Agent 根据错误继续修正，减少手工排查无效关系和绘图语法的负担。
+- **生成与修改过程可跟踪**：回看项目对话、工具执行和任务历史，查看本轮图表的处理中、成功或失败状态；已成功成果保留，失败项可重试，重启后可继续会话，便于整理自己的实现与修改依据。
+- **课设材料能接着用**：基于项目已保存的业务和模型生成测试用例、需求规格说明书与软件设计说明书，提供 Word（DOCX）预览、版本与下载；在同一对话里继续读取代码、实现功能并运行本机测试。
+
+应用基于 [Pi Coding Agent](https://github.com/earendil-works/pi) 实现，面向个人 Windows 用户。打开即可使用，无需注册登录；项目、模型、文档和会话记录保存在本机，模型服务由使用者自行配置（BYOK）。也适合需要同时整理设计材料与实现代码的个人开发者。
+
+### 校验与跟踪具体做什么
+
+| 你要检查的问题 | 当前提供的依据 | 帮助你完成什么 |
+| --- | --- | --- |
+| 图里是否有无效结构或关系 | 按图种检查结构字段、唯一标识、元素引用与适用的关系规则；时序模型还检查对象生命周期等语义 | 在保存和绘图前发现可检测的问题，按实际错误修改 |
+| 图能否被绘图引擎正常呈现 | 由结构化模型确定性构建 PlantUML 源码，并检查渲染结果 | 查看、编辑和导出可用图形，避免只得到一段未验证的绘图文本 |
+| 这轮生成或修改做到了哪里 | 图表任务状态、失败信息、项目对话、工具执行与运行历史 | 回看处理过程、定位失败项、继续对话和重试 |
+| 编码与测试是否实际执行 | 本机文件修改、PowerShell 输出和工具执行记录 | 对照实际结果复核实现，整理汇报与答辩依据 |
+
+规范指导与校验覆盖当前支持的模型字段和规则，不代表完整 OMG 元模型合规认证，也不能替代业务评审。这里的跟踪指任务、会话和工具执行记录；当前 Desktop 不提供需求到代码的自动追踪矩阵或变更影响审核。生成测试用例与实际运行测试分别记录，学校的模板和评分要求以你提供的材料为准。
+
+创建项目后可以先整理需求、生成设计，再接着编码，也可以直接分析和修改已有工程。**当前统一使用项目对话，按任务需要调用建模能力**，无需先走完固定的工程阶段。
+
+[官方下载](https://jianglisoftware.com/download) · [GitHub Releases](https://github.com/guolola/SoftJL-Desktop/releases) · [更新记录](changelog.md)
 
 ## 下载与安装
 
-从 [GitHub Releases](https://github.com/guolola/SoftJL-Desktop/releases/latest) 下载适合本机的安装包。当前提供 Windows x64（Intel / AMD 64 位）版本，未提供 ARM64、macOS、Linux 或便携版。
+从 [SoftJL 官方下载页](https://jianglisoftware.com/download) 获取安装包，也可直接打开 [GitHub Releases](https://github.com/guolola/SoftJL-Desktop/releases/latest) 查看版本、下载资产与校验文件。当前提供 Windows x64（Intel / AMD 64 位）版本，未提供 ARM64、macOS、Linux 或便携版。
 
 | 下载项 | 用途 |
 | --- | --- |
@@ -27,12 +83,6 @@ Get-FileHash -Algorithm SHA256 .\SoftJL-Desktop-0.1.0-windows-x64-setup.exe
 ```
 
 每个 Release 记录版本变化、依赖来源与使用限制。更新前退出应用并备份本地项目数据；v0.1.0 使用独立的 `desktop-v2` 数据库，旧版数据不会自动导入，见 [运行与打包](docs/development/desktop-runtime.md)。
-
-## 项目简介
-
-创建项目后直接描述业务、编码目标或已有代码问题，通过持续对话完成需求澄清、设计、实现与验证。可以先阅读已有项目再补充模型，也可以先整理需求和设计，再让 Agent 在选定代码目录中实现。
-
-**Desktop 当前只有统一的项目对话，已不提供独立的工程建模模式。** 建模是本地 Coding Agent 的一组能力，按任务需要调用；创建项目时无需选择“快速建模 / 工程建模”，编码前也不要求走完一套工程阶段。
 
 ## 与通用 Coding Agent 的侧重点
 
